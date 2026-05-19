@@ -4,326 +4,447 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>大富豪 勝率シミュレータ</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
+/* ── JSONテーマ変数 ──────────────────────────
+   dataColors: #AC3E00, #FB5B01, #FF8D44, #FFC199, #FFEEE2
+   bg:         #F8F8FB, #F1F1F4
+   text:       #000000, #666666, #CCCCCC
+   border:     #E6E6E6
+   ─────────────────────────────────────────── */
 :root {
-  --bg:      #0a0e0b;
-  --felt:    #0f1a12;
-  --sur:     #141f17;
-  --sur2:    #1a2820;
-  --bdr:     #243028;
-  --bdr2:    #2e3e34;
-  --gold:    #c9a84c;
-  --gold2:   #e8cc88;
-  --cream:   #f0e8d4;
-  --red:     #c94c4c;
-  --blue:    #4c8ec9;
-  --green:   #4caa6e;
-  --txt:     #dde8dd;
-  --txt2:    #7a9a82;
-  --txt3:    #3e5445;
-  --r:       10px;
-  --fd:      'Playfair Display', serif;
-  --fb:      'Noto Sans JP', sans-serif;
-  --fm:      'JetBrains Mono', monospace;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{
-  background:var(--bg);
-  background-image:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(20,40,20,.5) 0%,transparent 70%);
-  color:var(--txt);font-family:var(--fb);min-height:100vh;padding-bottom:80px;
+  --bg:      #F8F8FB;
+  --bg2:     #F1F1F4;
+  --white:   #ffffff;
+  --bdr:     #E6E6E6;
+  --bdr2:    #CCCCCC;
+
+  --acc:     #FB5B01;        /* dataColor[1] メインオレンジ */
+  --acc-dk:  #AC3E00;        /* dataColor[0] 濃いオレンジ */
+  --acc-lt:  #FFEEE2;        /* dataColor[4] 薄オレンジ */
+  --acc-md:  #FFC199;        /* dataColor[3] 中間オレンジ */
+  --acc2:    #FF8D44;        /* dataColor[2] 明るいオレンジ */
+
+  --txt:     #000000;
+  --txt2:    #666666;
+  --txt3:    #CCCCCC;
+
+  --red:     #C0392B;
+  --green:   #1A7A40;
+  --r:       6px;
+  --shadow:  0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
+  --shadow2: 0 3px 10px rgba(0,0,0,.09);
+
+  --font:    'Noto Sans JP', 'メイリオ', Meiryo, Arial, sans-serif;
+  --mono:    'JetBrains Mono', Consolas, monospace;
+  --base:    15px;  /* ベースフォントサイズ */
 }
 
-/* HEADER */
-header{
-  padding:44px 32px 32px;text-align:center;
-  border-bottom:1px solid var(--bdr);position:relative;
-}
-header::after{
-  content:'';position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);
-  width:100px;height:2px;
-  background:linear-gradient(90deg,transparent,var(--gold),transparent);
-}
-.suits{font-size:16px;letter-spacing:.5em;color:var(--txt3);margin-bottom:14px}
-.suits span{color:var(--red)}
-h1{
-  font-family:var(--fd);font-size:clamp(26px,5.5vw,46px);font-weight:900;
-  letter-spacing:-.01em;line-height:1.1;color:var(--cream);margin-bottom:6px;
-}
-h1 em{color:var(--gold);font-style:normal}
-.sub{font-size:12px;color:var(--txt3);letter-spacing:.04em}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: var(--base); }
 
-/* WRAP */
-.wrap{max-width:820px;margin:0 auto;padding:32px 20px 0}
+body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: var(--font);
+  font-size: 1rem;
+  line-height: 1.65;
+  min-height: 100vh;
+  padding-bottom: 80px;
+}
 
-/* SECTION LABEL */
-.slbl{
-  font-size:10px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
-  color:var(--gold);display:flex;align-items:center;gap:8px;margin-bottom:12px;
+/* ── ヘッダー ── */
+header {
+  background: var(--white);
+  border-bottom: 2px solid var(--acc);
+  padding: 18px 24px 16px;
+  box-shadow: var(--shadow);
 }
-.slbl::before,.slbl::after{content:'';flex:1;height:1px}
-.slbl::before{background:linear-gradient(90deg,var(--bdr2),transparent)}
-.slbl::after {background:linear-gradient(90deg,transparent,var(--bdr2))}
+.header-inner {
+  max-width: 860px; margin: 0 auto;
+  display: flex; align-items: center; gap: 14px;
+}
+.header-icon { font-size: 28px; line-height: 1; }
+.header-text h1 {
+  font-size: 1.35rem; font-weight: 700; line-height: 1.2; color: var(--txt);
+}
+.header-text p { font-size: 0.8rem; color: var(--txt2); margin-top: 2px; }
 
-/* CARD */
-.card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);padding:18px 20px}
+/* ── ラップ ── */
+.wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 0; }
 
-/* GRID */
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-@media(max-width:540px){.g2{grid-template-columns:1fr}}
+/* ── セクションタイトル ── */
+.st {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--acc-dk);
+  border-left: 3px solid var(--acc); padding-left: 8px;
+  margin-bottom: 10px;
+}
 
-/* SELECT */
-.flbl{font-size:11px;color:var(--txt3);margin-bottom:6px;letter-spacing:.04em}
-select{
-  width:100%;background:var(--sur2);border:1px solid var(--bdr2);
-  border-radius:7px;color:var(--txt);font-family:var(--fb);font-size:13px;
-  padding:9px 30px 9px 12px;appearance:none;cursor:pointer;outline:none;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a9a82'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:right 10px center;transition:border-color .15s;
+/* ── カード ── */
+.card {
+  background: var(--white);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
 }
-select:focus{border-color:var(--gold)}
 
-/* CHECKBOX */
-.chks{display:flex;flex-direction:column;gap:9px}
-.chk{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--txt);cursor:pointer;user-select:none}
-.chk input{display:none}
-.cbox{
-  width:17px;height:17px;flex-shrink:0;border:1.5px solid var(--bdr2);
-  border-radius:4px;background:var(--sur2);display:flex;align-items:center;justify-content:center;transition:all .15s;
-}
-.chk input:checked~.cbox{background:var(--gold);border-color:var(--gold)}
-.cbox::after{
-  content:'';display:none;width:4px;height:8px;
-  border:1.5px solid var(--bg);border-top:none;border-left:none;
-  transform:rotate(45deg) translateY(-1px);
-}
-.chk input:checked~.cbox::after{display:block}
-.chk.off{opacity:.3;pointer-events:none}
+/* ── グリッド ── */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media(max-width:560px) { .g2 { grid-template-columns: 1fr; } }
 
-/* MODE TOGGLE */
-.mtog{
-  display:flex;border:1px solid var(--bdr2);border-radius:var(--r);
-  overflow:hidden;background:var(--sur);margin-bottom:20px;
-}
-.mbtn{
-  flex:1;padding:12px 16px;background:transparent;border:none;cursor:pointer;
-  font-family:var(--fb);font-size:13px;color:var(--txt2);
-  display:flex;flex-direction:column;align-items:center;gap:3px;
-  transition:all .2s;border-right:1px solid var(--bdr2);
-}
-.mbtn:last-child{border-right:none}
-.mbtn.on{background:var(--sur2);color:var(--gold)}
-.mbtn small{font-size:10px;color:var(--txt3)}
-.mbtn.on small{color:var(--txt2)}
+/* ── フォームラベル ── */
+.fl { font-size: 0.82rem; color: var(--txt2); margin-bottom: 5px; font-weight: 500; }
 
-/* SLIDER */
-.srow{display:flex;align-items:center;gap:12px;margin-top:6px}
-input[type=range]{
-  flex:1;height:3px;appearance:none;background:var(--bdr2);border-radius:2px;outline:none;cursor:pointer;
+/* ── SELECT ── */
+select {
+  width: 100%; background: var(--white);
+  border: 1px solid var(--bdr2); border-radius: 5px;
+  color: var(--txt); font-family: var(--font); font-size: 0.93rem;
+  padding: 8px 28px 8px 10px;
+  appearance: none; cursor: pointer; outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23CCCCCC'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  transition: border-color .15s;
 }
-input[type=range]::-webkit-slider-thumb{appearance:none;width:13px;height:13px;background:var(--gold);border-radius:50%}
-.snum{font-family:var(--fm);font-size:13px;color:var(--gold);min-width:46px;text-align:right}
+select:focus { border-color: var(--acc); outline: 2px solid var(--acc-lt); }
 
-/* HAND */
-.htop{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
-.hhint{font-size:11px;color:var(--txt3);margin-bottom:14px;line-height:1.7}
-.hhint b{color:var(--gold);font-weight:500}
-.rgrid{
-  display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:14px;
+/* ── チェックボックス ── */
+.chks { display: flex; flex-direction: column; gap: 9px; }
+.chk {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 0.93rem; color: var(--txt); cursor: pointer; user-select: none;
 }
-@media(max-width:460px){.rgrid{grid-template-columns:repeat(4,1fr)}}
-.rc{display:flex;flex-direction:column;align-items:center;gap:5px}
-.rn{font-family:var(--fd);font-size:14px;font-weight:700;color:var(--txt2);line-height:1}
-.rn.sp{color:var(--red)}.rn.jk{color:var(--gold)}
-.stpr{display:flex;align-items:center;gap:3px}
-.sbtn{
-  width:21px;height:21px;background:var(--sur2);border:1px solid var(--bdr2);
-  border-radius:4px;cursor:pointer;color:var(--txt2);font-size:13px;
-  display:flex;align-items:center;justify-content:center;transition:all .12s;
-  font-family:var(--fm);
+.chk input { display: none; }
+.cbox {
+  width: 17px; height: 17px; flex-shrink: 0;
+  border: 1.5px solid var(--bdr2); border-radius: 4px; background: var(--white);
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
 }
-.sbtn:hover{background:var(--bdr2);color:var(--txt)}
-.sv{
-  width:16px;text-align:center;font-family:var(--fm);font-size:13px;
-  font-weight:600;color:var(--txt3);transition:color .12s;
+.chk input:checked ~ .cbox { background: var(--acc); border-color: var(--acc); }
+.cbox::after {
+  content: ''; display: none;
+  width: 4px; height: 8px;
+  border: 2px solid #fff; border-top: none; border-left: none;
+  transform: rotate(45deg) translateY(-1px);
 }
-.sv.v1{color:var(--blue)}.sv.v2{color:var(--green)}.sv.v3{color:var(--gold)}.sv.v4{color:var(--red)}
-.prev{display:flex;flex-wrap:wrap;gap:5px;min-height:22px}
-.ptag{
-  padding:2px 7px;border-radius:20px;font-size:11px;font-family:var(--fm);
-  background:var(--sur2);border:1px solid var(--bdr2);color:var(--txt2);
-}
-.ptag.hi {background:rgba(76,142,201,.12);border-color:rgba(76,142,201,.3);color:var(--blue)}
-.ptag.rv {background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.3);color:var(--gold)}
-.ptag.jk {background:rgba(76,170,110,.12);border-color:rgba(76,170,110,.3);color:var(--green)}
+.chk input:checked ~ .cbox::after { display: block; }
+.chk.off { opacity: .35; pointer-events: none; }
+.chk-note { font-size: 0.72rem; color: var(--txt3); margin-left: auto; }
 
-/* RUN BTN */
-.rbtn{
-  width:100%;padding:14px;
-  background:linear-gradient(135deg,var(--gold) 0%,var(--gold2) 100%);
-  border:none;border-radius:var(--r);color:var(--bg);
-  font-family:var(--fd);font-size:16px;font-weight:700;letter-spacing:.02em;
-  cursor:pointer;transition:all .15s;
-  display:flex;align-items:center;justify-content:center;gap:8px;
-  margin:20px 0 0;box-shadow:0 4px 20px rgba(201,168,76,.2);
+/* ── モードトグル ── */
+.mtog {
+  display: flex; border: 1px solid var(--bdr2);
+  border-radius: var(--r); overflow: hidden; background: var(--bg2);
+  margin-bottom: 10px;
 }
-.rbtn:hover{box-shadow:0 6px 28px rgba(201,168,76,.35);transform:translateY(-1px)}
-.rbtn:active{transform:translateY(0)}
-.rbtn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+.mbtn {
+  flex: 1; padding: 10px 14px; background: transparent; border: none;
+  cursor: pointer; font-family: var(--font); font-size: 0.93rem; color: var(--txt2);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  transition: all .18s; border-right: 1px solid var(--bdr);
+}
+.mbtn:last-child { border-right: none; }
+.mbtn.on { background: var(--white); color: var(--acc-dk); font-weight: 700; box-shadow: var(--shadow); }
+.mbtn small { font-size: 0.72rem; color: var(--txt3); }
+.mbtn.on small { color: var(--acc); }
 
-/* PROGRESS */
-.pbar-wrap{position:fixed;top:0;left:0;right:0;height:2px;z-index:200}
-.pbar{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));width:0;transition:width .08s linear}
+/* ── スライダー ── */
+.srow { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+input[type=range] {
+  flex: 1; height: 4px; appearance: none;
+  background: var(--bg2); border-radius: 2px; outline: none; cursor: pointer;
+  border: 1px solid var(--bdr);
+}
+input[type=range]::-webkit-slider-thumb {
+  appearance: none; width: 15px; height: 15px;
+  background: var(--acc); border-radius: 50%;
+  box-shadow: 0 0 0 2px white, 0 0 0 3.5px var(--acc-md);
+}
+.snum { font-family: var(--mono); font-size: 0.93rem; font-weight: 700; color: var(--acc); min-width: 50px; text-align: right; }
 
-/* RESULT */
-#result{display:none}
-.rnote{
-  text-align:center;margin-bottom:16px;
+/* ── 手札入力 ── */
+.hand-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+  flex-wrap: wrap; gap: 8px;
 }
-.mode-pill{
-  display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border-radius:20px;
-  border:1px solid var(--gold);color:var(--gold);
-  background:rgba(201,168,76,.08);font-size:11px;letter-spacing:.04em;
-}
-.rboxes{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:24px}
-.rbox{
-  background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);
-  padding:16px 14px;position:relative;overflow:hidden;
-  animation:fadeUp .4s ease both;
-}
-.rbox::after{content:'';position:absolute;top:0;left:0;right:0;height:2px}
-.rbox.r1::after{background:linear-gradient(90deg,var(--gold),var(--gold2))}
-.rbox.r2::after{background:var(--blue)}
-.rbox.r3::after{background:var(--txt3)}
-.rbox.rl::after{background:var(--red)}
-.rb-rank{font-size:10px;color:var(--txt3);margin-bottom:5px;letter-spacing:.08em}
-.rb-pct{font-family:var(--fd);font-size:30px;font-weight:900;line-height:1;margin-bottom:3px}
-.rbox.r1 .rb-pct{color:var(--gold)}
-.rbox.r2 .rb-pct{color:var(--blue)}
-.rbox.r3 .rb-pct{color:var(--txt2)}
-.rbox.rl .rb-pct{color:var(--red)}
-.rb-name{font-size:11px;color:var(--txt2)}
-.bars{margin-bottom:24px}
-.bitem{margin-bottom:9px}
-.bhead{display:flex;justify-content:space-between;font-size:12px;color:var(--txt2);margin-bottom:3px}
-.btrack{height:7px;background:var(--sur2);border-radius:4px;overflow:hidden}
-.bfill{height:100%;border-radius:4px;transition:width .7s cubic-bezier(.16,1,.3,1);width:0}
-.dvdr{border:none;border-top:1px solid var(--bdr);margin:20px 0}
-.abox{
-  background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);
-  padding:18px;margin-bottom:14px;animation:fadeUp .4s ease both;
-}
-.atitle{
-  font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;
-  color:var(--gold);margin-bottom:12px;
-}
-.aitem{
-  font-size:12px;color:var(--txt2);line-height:1.75;
-  padding:9px 0;border-bottom:1px solid var(--bdr);
-}
-.aitem:last-child{border-bottom:none;padding-bottom:0}
-.aitem strong{color:var(--txt)}
-.badge{
-  display:inline-block;padding:1px 7px;border-radius:3px;
-  font-size:10px;font-weight:700;font-family:var(--fm);
-  margin-right:5px;letter-spacing:.03em;
-  background:rgba(201,168,76,.15);color:var(--gold);border:1px solid rgba(201,168,76,.3);
-}
-.badge.b{background:rgba(76,142,201,.15);color:var(--blue);border-color:rgba(76,142,201,.3)}
-.badge.g{background:rgba(76,170,110,.15);color:var(--green);border-color:rgba(76,170,110,.3)}
-.badge.r{background:rgba(201,76,76,.15);color:var(--red);border-color:rgba(201,76,76,.3)}
+.hand-total { font-size: 0.82rem; color: var(--txt2); }
+.total-num { font-family: var(--mono); font-weight: 700; color: var(--acc); font-size: 1rem; }
 
-/* SPINNER */
-.spin{
-  display:none;width:16px;height:16px;
-  border:2px solid rgba(10,14,11,.4);border-top-color:var(--bg);
-  border-radius:50%;animation:rot .5s linear infinite;
+.hand-hint {
+  font-size: 0.8rem; color: var(--txt2); margin-bottom: 14px; line-height: 1.6;
+  background: var(--bg); padding: 7px 10px; border-radius: 5px;
+  border-left: 3px solid var(--acc-md);
 }
-@keyframes rot{to{transform:rotate(360deg)}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.hand-hint b { color: var(--acc-dk); font-weight: 700; }
+
+.rgrid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 12px;
+}
+@media(max-width:500px) { .rgrid { grid-template-columns: repeat(4, 1fr); gap: 6px; } }
+
+.rc { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.rname { font-size: 0.93rem; font-weight: 700; color: var(--txt); line-height: 1; }
+.rname.sp  { color: #C0392B; }
+.rname.jkr { color: var(--acc-dk); }
+
+.stpr { display: flex; align-items: center; gap: 3px; }
+.sbtn {
+  width: 22px; height: 22px;
+  background: var(--bg2); border: 1px solid var(--bdr);
+  border-radius: 4px; cursor: pointer; color: var(--txt2);
+  font-size: 14px; display: flex; align-items: center; justify-content: center;
+  transition: all .1s; font-family: var(--mono);
+}
+.sbtn:hover { background: var(--bdr); color: var(--txt); }
+.sv {
+  width: 18px; text-align: center;
+  font-family: var(--mono); font-size: 0.87rem; font-weight: 700;
+  color: var(--txt3); transition: color .1s;
+}
+.sv.v1 { color: var(--acc); }
+.sv.v2 { color: #16a34a; }
+.sv.v3 { color: var(--acc2); }
+.sv.v4 { color: var(--acc-dk); }
+
+.prev { display: flex; flex-wrap: wrap; gap: 5px; min-height: 24px; margin-top: 8px; }
+.ptag {
+  padding: 2px 8px; border-radius: 20px; font-size: 0.78rem;
+  font-family: var(--mono); font-weight: 500;
+  background: var(--bg2); border: 1px solid var(--bdr); color: var(--txt2);
+}
+.ptag.hi  { background: var(--acc-lt); border-color: var(--acc-md); color: var(--acc-dk); }
+.ptag.rv  { background: #FFF3CD; border-color: #F5C842; color: #7A5000; }
+.ptag.jkr { background: #E8F5E9; border-color: #81C784; color: #1B5E20; }
+
+/* ── ランダムボタン ── */
+.rand-btn {
+  padding: 6px 13px; font-size: 0.82rem; font-family: var(--font);
+  background: var(--bg2); border: 1px solid var(--bdr2); border-radius: 5px;
+  color: var(--txt2); cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.rand-btn:hover { background: var(--acc-lt); border-color: var(--acc-md); color: var(--acc-dk); }
+
+/* ── 実行ボタン ── */
+.run-btn {
+  width: 100%; padding: 14px;
+  background: var(--acc);
+  border: none; border-radius: var(--r);
+  color: white; font-family: var(--font); font-size: 1.05rem; font-weight: 700;
+  cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  margin: 16px 0 0;
+  box-shadow: 0 3px 10px rgba(251,91,1,.25);
+}
+.run-btn:hover { background: var(--acc-dk); box-shadow: 0 5px 16px rgba(172,62,0,.3); }
+.run-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+/* ── プログレスバー ── */
+.pbar-wrap { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 100; }
+.pbar { height: 100%; background: var(--acc); width: 0; transition: width .08s linear; }
+
+/* ── 結果 ── */
+#result { display: none; }
+
+.res-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; flex-wrap: wrap; gap: 6px;
+}
+.mode-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 11px; border-radius: 20px; font-size: 0.78rem; font-weight: 500;
+  background: var(--acc-lt); color: var(--acc-dk); border: 1px solid var(--acc-md);
+}
+
+.rboxes {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr));
+  gap: 10px; margin-bottom: 16px;
+}
+.rbox {
+  background: var(--white); border: 1px solid var(--bdr);
+  border-radius: var(--r); padding: 14px 13px;
+  position: relative; overflow: hidden;
+  box-shadow: var(--shadow);
+  animation: fadeUp .35s ease both;
+}
+.rbox::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.rbox.r1::before { background: linear-gradient(90deg, var(--acc-dk), var(--acc2)); }
+.rbox.r2::before { background: var(--acc); }
+.rbox.r3::before { background: var(--bdr2); }
+.rbox.rl::before { background: var(--red); }
+.rb-rank { font-size: 0.72rem; color: var(--txt2); margin-bottom: 4px; font-weight: 500; }
+.rb-pct {
+  font-family: var(--mono); font-size: 1.8rem; font-weight: 700;
+  line-height: 1.1; margin-bottom: 2px;
+}
+.rbox.r1 .rb-pct { color: var(--acc-dk); }
+.rbox.r2 .rb-pct { color: var(--acc); }
+.rbox.r3 .rb-pct { color: var(--txt2); }
+.rbox.rl .rb-pct { color: var(--red); }
+.rb-name { font-size: 0.82rem; color: var(--txt2); font-weight: 500; }
+
+.bars { margin-bottom: 16px; }
+.bitem { margin-bottom: 9px; }
+.bhead {
+  display: flex; justify-content: space-between;
+  font-size: 0.87rem; color: var(--txt2); margin-bottom: 4px;
+}
+.btrack { height: 8px; background: var(--bg2); border-radius: 4px; overflow: hidden; border: 1px solid var(--bdr); }
+.bfill { height: 100%; border-radius: 4px; transition: width .65s cubic-bezier(.16,1,.3,1); width: 0; }
+
+.dvdr { border: none; border-top: 1px solid var(--bdr); margin: 16px 0; }
+
+.abox {
+  background: var(--white); border: 1px solid var(--bdr);
+  border-radius: var(--r); padding: 15px 17px; margin-bottom: 10px;
+  box-shadow: var(--shadow);
+  animation: fadeUp .35s ease both;
+}
+.atitle {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--acc-dk); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+.atitle::before { content: ''; width: 12px; height: 2px; background: var(--acc); display: inline-block; }
+.aitem {
+  font-size: 0.87rem; color: var(--txt2); line-height: 1.75;
+  padding: 8px 0; border-bottom: 1px solid var(--bg2);
+}
+.aitem:last-child { border-bottom: none; padding-bottom: 0; }
+.aitem strong { color: var(--txt); }
+.badge {
+  display: inline-block; padding: 1px 7px; border-radius: 3px;
+  font-size: 0.72rem; font-weight: 700; font-family: var(--mono);
+  margin-right: 5px;
+  background: var(--acc-lt); color: var(--acc-dk); border: 1px solid var(--acc-md);
+}
+.badge.g { background: #E8F5E9; color: #1B5E20; border-color: #81C784; }
+.badge.r { background: #FFEBEE; color: #B71C1C; border-color: #EF9A9A; }
+.badge.y { background: #FFF3CD; color: #7A5000; border-color: #F5C842; }
+
+.spin {
+  display: none; width: 17px; height: 17px;
+  border: 2px solid rgba(255,255,255,.4); border-top-color: white;
+  border-radius: 50%; animation: rot .5s linear infinite;
+}
+@keyframes rot    { to { transform: rotate(360deg); } }
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 </style>
 </head>
 <body>
+
 <div class="pbar-wrap"><div class="pbar" id="pbar"></div></div>
 
 <header>
-  <div class="suits"><span>♥</span> ♠ ♦ <span>♣</span></div>
-  <h1>大富豪 <em>勝率</em> シミュレータ</h1>
-  <div class="sub">初期手札から各順位への着地確率を算出</div>
+  <div class="header-inner">
+    <div class="header-icon">🃏</div>
+    <div class="header-text">
+      <h1>大富豪 勝率シミュレータ</h1>
+      <p>初期手札から各順位への着地確率を算出</p>
+    </div>
+  </div>
 </header>
 
 <div class="wrap">
 
   <!-- 設定 -->
-  <div class="slbl">設定</div>
-  <div class="g2">
-    <div class="card">
-      <div class="flbl">プレイヤー人数</div>
-      <select id="numP">
-        <option value="3" selected>3人</option>
-        <option value="4">4人</option>
-        <option value="5">5人</option>
-      </select>
-      <div style="margin-top:12px">
-        <div class="flbl">現在の役職（アドバイス用）</div>
-        <select id="myPos">
-          <option value="平民">平民（初戦）</option>
-          <option value="富豪">富豪</option>
-          <option value="貧民">貧民</option>
+  <div style="margin-bottom:16px">
+    <div class="st" style="margin-bottom:10px">設定</div>
+    <div class="g2">
+      <div class="card">
+        <div class="fl">プレイヤー人数</div>
+        <select id="numP">
+          <option value="3" selected>3人</option>
+          <option value="4">4人</option>
+          <option value="5">5人</option>
         </select>
+        <div style="margin-top:12px">
+          <div class="fl">現在の役職（アドバイス用）</div>
+          <select id="myPos">
+            <option value="平民">平民（初戦）</option>
+            <option value="富豪">富豪</option>
+            <option value="貧民">貧民</option>
+          </select>
+        </div>
       </div>
-    </div>
-    <div class="card">
-      <div class="flbl" style="margin-bottom:10px">ルール設定</div>
-      <div class="chks">
-        <label class="chk"><input type="checkbox" id="r8" checked><span class="cbox"></span>8切り</label>
-        <label class="chk off"><input type="checkbox" checked disabled><span class="cbox"></span>スペード3返しなし</label>
-        <label class="chk off"><input type="checkbox" checked disabled><span class="cbox"></span>ジョーカー 2枚</label>
-        <label class="chk off"><input type="checkbox" checked disabled><span class="cbox"></span>革命：4枚出しで成立</label>
+      <div class="card">
+        <div class="fl" style="margin-bottom:9px">ルール設定</div>
+        <div class="chks">
+          <label class="chk">
+            <input type="checkbox" id="r8" checked><span class="cbox"></span>8切り
+          </label>
+          <label class="chk">
+            <input type="checkbox" id="rRev" checked><span class="cbox"></span>革命（4枚出しで成立）
+          </label>
+          <label class="chk off">
+            <input type="checkbox" checked disabled><span class="cbox"></span>スペード3返しなし
+            <span class="chk-note">固定</span>
+          </label>
+          <label class="chk off">
+            <input type="checkbox" checked disabled><span class="cbox"></span>ジョーカー 2枚
+            <span class="chk-note">固定</span>
+          </label>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- 計算モード -->
-  <div class="slbl">計算モード</div>
-  <div class="mtog">
-    <button class="mbtn on" id="mScore" onclick="setMode('score')">
-      スコアモード<small>即時・軽量</small>
-    </button>
-    <button class="mbtn" id="mMC" onclick="setMode('mc')">
-      モンテカルロ<small>統計的・精度高め</small>
-    </button>
-  </div>
-  <div class="card" id="trialCard" style="display:none;margin-bottom:20px">
-    <div class="flbl">試行回数</div>
-    <div class="srow">
-      <input type="range" id="trials" min="200" max="1000" step="100" value="500">
-      <div class="snum"><span id="trialN">500</span> 回</div>
+  <div style="margin-bottom:16px">
+    <div class="st" style="margin-bottom:10px">計算モード</div>
+    <div class="mtog">
+      <button class="mbtn on" id="mScore" onclick="setMode('score')">
+        スコアモード<small>即時・軽量</small>
+      </button>
+      <button class="mbtn" id="mMC" onclick="setMode('mc')">
+        モンテカルロ<small>統計的・精度高め</small>
+      </button>
+    </div>
+    <div class="card" id="trialCard" style="display:none">
+      <div class="fl">試行回数</div>
+      <div class="srow">
+        <input type="range" id="trials" min="200" max="1000" step="100" value="500">
+        <div class="snum"><span id="trialN">500</span> 回</div>
+      </div>
     </div>
   </div>
 
-  <!-- 手札 -->
-  <div class="slbl">手札入力</div>
-  <div class="card" style="margin-bottom:0">
-    <div class="htop">
-      <div class="flbl" style="margin:0">各数字の所持枚数（JKR: 0〜2枚）</div>
-      <div style="font-size:12px;color:var(--txt2)">合計 <span id="tot" style="font-family:var(--fm);color:var(--gold)">0</span> 枚</div>
+  <!-- 手札入力 -->
+  <div style="margin-bottom:0">
+    <div class="st" style="margin-bottom:10px">手札入力</div>
+    <div class="card">
+      <div class="hand-header">
+        <div>
+          <span style="font-size:0.93rem;font-weight:700">各数字の所持枚数</span>
+          <span class="hand-total" style="margin-left:10px">合計
+            <span class="total-num" id="tot">0</span> 枚
+          </span>
+        </div>
+        <button class="rand-btn" onclick="randHand()">🎲 ランダム配布</button>
+      </div>
+      <div class="hand-hint">
+        強さ順（通常時）: 3 &lt; 4 &lt; 5 &lt; 6 &lt; 7 &lt; 8 &lt; 9 &lt; 10 &lt; J &lt; Q &lt; K &lt; A &lt; 2 &lt; <b>JKR</b>
+        　／　JKR最大2枚、その他最大4枚
+      </div>
+      <div class="rgrid" id="grid"></div>
+      <div class="prev" id="prev"></div>
     </div>
-    <div class="hhint" style="margin-top:8px">
-      強さ順（通常時）: 3 &lt; 4 &lt; 5 &lt; 6 &lt; 7 &lt; 8 &lt; 9 &lt; 10 &lt; J &lt; Q &lt; K &lt; A &lt; 2 &lt; <b>JKR</b>
-    </div>
-    <div class="rgrid" id="grid"></div>
-    <div class="prev" id="prev"></div>
   </div>
 
-  <button class="rbtn" id="runBtn" onclick="run()">
+  <!-- 実行ボタン -->
+  <button class="run-btn" id="runBtn" onclick="run()">
     <div class="spin" id="spin"></div>
     <span id="runL">分析する</span>
   </button>
 
   <!-- 結果 -->
-  <div id="result" style="margin-top:32px">
-    <div class="rnote"><span class="mode-pill" id="modeNote"></span></div>
+  <div id="result" style="margin-top:24px">
+    <div class="res-meta">
+      <div class="st" style="margin:0">分析結果</div>
+      <span class="mode-chip" id="modeChip"></span>
+    </div>
     <div class="rboxes" id="rboxes"></div>
     <div class="bars" id="bars"></div>
     <hr class="dvdr">
@@ -333,128 +454,170 @@ input[type=range]::-webkit-slider-thumb{appearance:none;width:13px;height:13px;b
 </div>
 
 <script>
-// ── 定数 ──
-const NUMS=[3,4,5,6,7,8,9,10,11,12,13,14,15,16];
-const NR=Object.fromEntries(NUMS.map((n,i)=>[n,i]));
-const RR=Object.fromEntries([16,...NUMS.slice(0,-1).reverse()].map((n,i)=>[n,i]));
-const D={3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',11:'J',12:'Q',13:'K',14:'A',15:'2',16:'JKR'};
-const CDEFS=[[3,'3',''],[4,'4',''],[5,'5',''],[6,'6',''],[7,'7',''],[8,'8',''],[9,'9',''],[10,'10',''],[11,'J',''],[12,'Q',''],[13,'K',''],[14,'A','sp'],[15,'2','sp'],[16,'JKR','jk']];
-const RNAMES={3:{1:'大富豪',2:'平民',3:'大貧民'},4:{1:'大富豪',2:'富豪',3:'貧民',4:'大貧民'},5:{1:'大富豪',2:'富豪',3:'平民',4:'貧民',5:'大貧民'}};
-const BCOL={1:'var(--gold)',2:'var(--blue)',3:'var(--txt3)',4:'var(--red)',5:'var(--red)'};
-const BCLS={1:'r1',2:'r2',3:'r3',4:'rl',5:'rl'};
+// ── 定数 ──────────────────────────────────────────────
+const NUMS = [3,4,5,6,7,8,9,10,11,12,13,14,15,16];
+const NR   = Object.fromEntries(NUMS.map((n,i)=>[n,i]));
+const RR   = Object.fromEntries([16,...NUMS.slice(0,-1).reverse()].map((n,i)=>[n,i]));
+const D    = {3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',
+              11:'J',12:'Q',13:'K',14:'A',15:'2',16:'JKR'};
+const CDEFS= [
+  [3,'3',''],[4,'4',''],[5,'5',''],[6,'6',''],[7,'7',''],[8,'8',''],[9,'9',''],
+  [10,'10',''],[11,'J',''],[12,'Q',''],[13,'K',''],[14,'A','sp'],[15,'2','sp'],[16,'JKR','jkr']
+];
+// 役職名（大富豪→富豪、大貧民→貧民）
+const RNAMES = {
+  3: {1:'富豪',  2:'平民', 3:'貧民'},
+  4: {1:'大富豪',2:'富豪', 3:'貧民', 4:'大貧民'},
+  5: {1:'大富豪',2:'富豪', 3:'平民', 4:'貧民', 5:'大貧民'}
+};
+// バーの色（JSONデータカラー準拠）
+const BCOL = {1:'#AC3E00',2:'#FB5B01',3:'#CCCCCC',4:'#C0392B',5:'#C0392B'};
+const BCLS = {1:'r1',2:'r2',3:'r3',4:'rl',5:'rl'};
 
-function rk(n,rev){return n===16?NUMS.length-1:(rev?RR:NR)[n]}
+function rk(n,rev){ return n===16 ? NUMS.length-1 : (rev?RR:NR)[n]; }
 
-// ── モード ──
+// ── モード ────────────────────────────────────────────
 let mode='score';
 function setMode(m){
   mode=m;
   document.getElementById('mScore').classList.toggle('on',m==='score');
   document.getElementById('mMC').classList.toggle('on',m==='mc');
-  document.getElementById('trialCard').style.display=m==='mc'?'block':'none';
+  document.getElementById('trialCard').style.display = m==='mc'?'block':'none';
 }
-document.getElementById('trials').oninput=function(){document.getElementById('trialN').textContent=this.value};
+document.getElementById('trials').oninput = function(){
+  document.getElementById('trialN').textContent = this.value;
+};
 
-// ── 手札入力 ──
-const HC=Object.fromEntries(NUMS.map(n=>[n,0]));
+// ── 手札管理 ──────────────────────────────────────────
+const HC = Object.fromEntries(NUMS.map(n=>[n,0]));
+
 function buildGrid(){
-  const g=document.getElementById('grid');g.innerHTML='';
-  for(const[num,lbl,cls]of CDEFS){
-    const max=num===16?2:4;
-    const cell=document.createElement('div');cell.className='rc';
-    const nm=document.createElement('div');nm.className='rn'+(cls?' '+cls:'');nm.textContent=lbl;
-    const vl=document.createElement('div');vl.className='sv';vl.id='sv'+num;vl.textContent='0';
-    const mi=document.createElement('button');mi.className='sbtn';mi.textContent='−';mi.onclick=()=>chg(num,-1,max);
-    const pl=document.createElement('button');pl.className='sbtn';pl.textContent='+';pl.onclick=()=>chg(num,+1,max);
-    const st=document.createElement('div');st.className='stpr';st.append(mi,vl,pl);
-    cell.append(nm,st);g.appendChild(cell);
+  const g = document.getElementById('grid'); g.innerHTML='';
+  for(const [num,lbl,cls] of CDEFS){
+    const max = num===16?2:4;
+    const cell = document.createElement('div'); cell.className='rc';
+    const nm = document.createElement('div');
+    nm.className = 'rname'+(cls?' '+cls:''); nm.textContent = lbl;
+    const vl = document.createElement('div');
+    vl.className='sv'; vl.id='sv'+num; vl.textContent='0';
+    const mi = document.createElement('button');
+    mi.className='sbtn'; mi.textContent='−'; mi.onclick=()=>chg(num,-1,max);
+    const pl = document.createElement('button');
+    pl.className='sbtn'; pl.textContent='+'; pl.onclick=()=>chg(num,+1,max);
+    const st = document.createElement('div'); st.className='stpr'; st.append(mi,vl,pl);
+    cell.append(nm,st); g.appendChild(cell);
   }
 }
 function chg(n,d,max){
-  HC[n]=Math.max(0,Math.min(max,HC[n]+d));
-  const el=document.getElementById('sv'+n);
-  el.textContent=HC[n];el.className='sv'+(HC[n]?' v'+HC[n]:'');
+  HC[n] = Math.max(0,Math.min(max,HC[n]+d));
+  const el = document.getElementById('sv'+n);
+  el.textContent = HC[n]; el.className = 'sv'+(HC[n]?' v'+HC[n]:'');
+  updPrev();
+}
+function setHand(hand){
+  for(const n of NUMS){
+    HC[n] = hand[n]||0;
+    const el = document.getElementById('sv'+n);
+    if(el){ el.textContent=HC[n]; el.className='sv'+(HC[n]?' v'+HC[n]:''); }
+  }
   updPrev();
 }
 function updPrev(){
-  const tot=NUMS.reduce((s,n)=>s+HC[n],0);
-  document.getElementById('tot').textContent=tot;
-  const p=document.getElementById('prev');p.innerHTML='';
+  const tot = NUMS.reduce((s,n)=>s+HC[n],0);
+  document.getElementById('tot').textContent = tot;
+  const p = document.getElementById('prev'); p.innerHTML='';
   for(const n of NUMS){
-    if(!HC[n])continue;
-    const t=document.createElement('span');
+    if(!HC[n]) continue;
+    const t = document.createElement('span');
     let c='ptag';
-    if(n===16)c+=' jk';else if(HC[n]===4)c+=' rv';else if(n>=14)c+=' hi';
-    t.className=c;t.textContent=D[n]+'×'+HC[n];p.appendChild(t);
+    if(n===16) c+=' jkr';
+    else if(HC[n]===4) c+=' rv';
+    else if(n>=14) c+=' hi';
+    t.className=c; t.textContent=D[n]+'×'+HC[n];
+    p.appendChild(t);
   }
 }
 buildGrid();
 
-// ── スコアモード ──
-function scoreMode(hand,np,r8){
-  function ns(n){return n===16?1.0:NR[n]/12}
-  let sc=0;const fours=[];let joker=hand[16]||0,pairs=0,highCnt=0;
+// ── ランダム配布 ──────────────────────────────────────
+function randHand(){
+  const np = +document.getElementById('numP').value;
+  const perP = Math.floor(54/np);
+  const deck = [];
+  for(let n=3;n<=15;n++) for(let i=0;i<4;i++) deck.push(n);
+  deck.push(16,16);
+  for(let i=deck.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [deck[i],deck[j]]=[deck[j],deck[i]];
+  }
+  const hand = Object.fromEntries(NUMS.map(n=>[n,0]));
+  for(let i=0;i<perP;i++) hand[deck[i]]++;
+  setHand(hand);
+}
+
+// ── スコアモード ──────────────────────────────────────
+function scoreMode(hand,np,r8,rRev){
+  function ns(n){ return n===16?1.0:NR[n]/12; }
+  let sc=0; const fours=[]; let joker=hand[16]||0, pairs=0;
   for(const n of NUMS){
-    const c=hand[n]||0;if(!c)continue;
-    const s=ns(n);sc+=s*c*3.0;
-    if(n>=14)highCnt+=c;
-    if(c>=2){pairs++;sc+=0.25}
-    if(c>=3)sc+=0.55;
-    if(c>=4){
+    const c=hand[n]||0; if(!c) continue;
+    const s=ns(n); sc+=s*c*3.0;
+    if(c>=2){ pairs++; sc+=0.25; }
+    if(c>=3) sc+=0.55;
+    if(c>=4&&rRev){
       fours.push(n);
-      const revStr=ns(n);const postRevB=(1-revStr)*1.2;
+      const postRevB=(1-ns(n))*1.2;
       const rem=Object.fromEntries(NUMS.map(k=>[k,k===n?0:hand[k]||0]));
       const remTot=NUMS.reduce((s,k)=>s+(rem[k]||0),0)||1;
       const postAvg=NUMS.reduce((s,k)=>{
-        const rc=rem[k];if(!rc)return s;
-        const rv=k===16?1.0:(12-NR[k])/12;return s+rv*rc;
+        const rc=rem[k]; if(!rc) return s;
+        return s+(k===16?1.0:(12-NR[k])/12)*rc;
       },0)/remTot;
-      sc+=0.8+postRevB+postAvg*0.6;
+      sc += 0.8+postRevB+postAvg*0.6;
     }
   }
-  if(joker>0)sc+=joker*1.5;
-  if((hand[8]||0)>0&&r8)sc+=0.35;
+  if(joker>0) sc+=joker*1.5;
+  if((hand[8]||0)>0&&r8) sc+=0.35;
   const tot=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
   const rat=tot/18;
-  if(rat<0.8)sc*=0.82;else if(rat<0.95)sc*=0.93;else if(rat>1.2)sc*=0.92;
-  const ref=9.5;
-  const raw=Math.tanh((sc/ref-.9)*2.2)*.45+.42;
-  const w=Math.min(.90,Math.max(.06,raw));
+  if(rat<0.8)sc*=0.82; else if(rat<0.95)sc*=0.93; else if(rat>1.2)sc*=0.92;
+  const w=Math.min(.90,Math.max(.06,Math.tanh((sc/9.5-.9)*2.2)*.45+.42));
   const rates={};
-  if(np===3){rates[1]=w;rates[2]=Math.min(.96,(1-(1-w)**2)*.85+w*.1);rates[3]=Math.max(.02,(1-w)**2*.7)}
-  else if(np===4){rates[1]=w;rates[2]=Math.min(.94,(1-(1-w)**3)*.6+w*.15);rates[3]=Math.min(.92,1-w-(rates[2]-w)*.5);rates[4]=Math.max(.01,(1-w)**3*.55)}
-  else{rates[1]=w;rates[2]=Math.min(.90,(1-(1-w)**4)*.5+w*.1);rates[3]=Math.min(.85,1-w-rates[2]*.35);rates[4]=Math.min(.5,(1-w)**3*.45);rates[5]=Math.max(.01,(1-w)**4*.4)}
+  if(np===3){ rates[1]=w; rates[2]=Math.min(.96,(1-(1-w)**2)*.85+w*.1); rates[3]=Math.max(.02,(1-w)**2*.7); }
+  else if(np===4){ rates[1]=w; rates[2]=Math.min(.94,(1-(1-w)**3)*.6+w*.15); rates[3]=Math.min(.92,1-w-(rates[2]-w)*.5); rates[4]=Math.max(.01,(1-w)**3*.55); }
+  else{ rates[1]=w; rates[2]=Math.min(.90,(1-(1-w)**4)*.5+w*.1); rates[3]=Math.min(.85,1-w-rates[2]*.35); rates[4]=Math.min(.5,(1-w)**3*.45); rates[5]=Math.max(.01,(1-w)**4*.4); }
   const sum=Object.values(rates).reduce((a,b)=>a+b,0);
-  for(const k in rates)rates[k]=Math.round(rates[k]/sum*1000)/10;
+  for(const k in rates) rates[k]=Math.round(rates[k]/sum*1000)/10;
   return rates;
 }
 
-// ── モンテカルロ ──
-function shuf(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function cpOk(n,sz,f,rev){if(!f)return true;return sz===f[1]&&rk(n,rev)>rk(f[0],rev)}
+// ── モンテカルロ ──────────────────────────────────────
+function shuf(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a; }
+function cpOk(n,sz,f,rev){ if(!f)return true; return sz===f[1]&&rk(n,rev)>rk(f[0],rev); }
 function avgRevRk(hand,used,nr){
-  const v=[];for(const n of NUMS){const c=hand[n]||0;if(!c||n===used)continue;for(let i=0;i<c;i++)v.push(rk(n,nr))}
+  const v=[];
+  for(const n of NUMS){ const c=hand[n]||0; if(!c||n===used)continue; for(let i=0;i<c;i++)v.push(rk(n,nr)); }
   return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;
 }
-function pick(hand,field,rev,opp){
+function pick(hand,field,rev,opp,rRev){
   const tot=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
   const danger=opp.length&&Math.min(...opp)<=2;
-  const mx=NUMS.length-1;const cands=[];
+  const mx=NUMS.length-1; const cands=[];
   for(const num of NUMS){
-    const cnt=hand[num]||0;if(!cnt)continue;
+    const cnt=hand[num]||0; if(!cnt)continue;
     for(let sz=1;sz<=cnt;sz++){
       if(!cpOk(num,sz,field,rev))continue;
-      const r=rk(num,rev);const nr=r/mx;let sc=0;
-      if(cnt===sz)sc+=35;sc+=sz*12;
+      const r=rk(num,rev); const nr=r/mx; let sc=0;
+      if(cnt===sz)sc+=35; sc+=sz*12;
       if(tot<=4)sc+=nr*45+20;
       else if(danger)sc+=nr*55;
       else if(!field)sc-=nr*30;
       else{
         const rd=rk(num,rev)-rk(field[0],rev);
-        if(rd===1)sc+=25;else if(rd===2)sc+=18;else if(rd===3)sc+=12;else if(rd>=8)sc-=20;
+        if(rd===1)sc+=25; else if(rd===2)sc+=18; else if(rd===3)sc+=12; else if(rd>=8)sc-=20;
         sc-=nr*18;
       }
-      if(sz===4){const pn=avgRevRk(hand,num,!rev)/mx;sc+=20+pn*35;if(danger)sc+=25}
+      if(sz===4&&rRev){ const pn=avgRevRk(hand,num,!rev)/mx; sc+=20+pn*35; if(danger)sc+=25; }
       if(cnt>=2&&sz===1&&cnt<=3)sc-=25;
       if(cnt===3&&sz===2)sc-=15;
       if(cnt===4&&sz>=1&&sz<=3)sc-=18;
@@ -462,152 +625,158 @@ function pick(hand,field,rev,opp){
     }
   }
   if(!cands.length)return null;
-  cands.sort((a,b)=>b[0]-a[0]);return[cands[0][1],cands[0][2]];
+  cands.sort((a,b)=>b[0]-a[0]);
+  return[cands[0][1],cands[0][2]];
 }
-function simOnce(pH,np,r8){
-  const full=[];for(let n=3;n<=15;n++)for(let i=0;i<4;i++)full.push(n);full.push(16,16);
+function simOnce(pH,np,r8,rRev){
+  const full=[]; for(let n=3;n<=15;n++)for(let i=0;i<4;i++)full.push(n); full.push(16,16);
   const un=[...full];
-  for(const n of NUMS){const c=pH[n]||0;for(let i=0;i<c;i++){const idx=un.indexOf(n);if(idx!==-1)un.splice(idx,1)}}
+  for(const n of NUMS){ const c=pH[n]||0; for(let i=0;i<c;i++){const idx=un.indexOf(n);if(idx!==-1)un.splice(idx,1);} }
   shuf(un);
   const players=[{...pH}];
-  for(let i=0;i<np-1;i++){const h=Object.fromEntries(NUMS.map(n=>[n,0]));for(const c of un.slice(i*18,(i+1)*18))h[c]++;players.push(h)}
+  for(let i=0;i<np-1;i++){
+    const h=Object.fromEntries(NUMS.map(n=>[n,0]));
+    for(const c of un.slice(i*18,(i+1)*18))h[c]++;
+    players.push(h);
+  }
   const active=Array.from({length:np},(_,i)=>i);
-  const rnk=[];let field=null,rev=false,cur=0,cp=0,turn=0;
+  const rnk=[]; let field=null,rev=false,cur=0,cp=0,turn=0;
   const sum=h=>NUMS.reduce((s,n)=>s+(h[n]||0),0);
   while(active.length>1&&turn<2000){
-    turn++;const pid=active[cur];const h=players[pid];
+    turn++;
+    const pid=active[cur]; const h=players[pid];
     const opp=active.filter(j=>j!==pid).map(j=>sum(players[j]));
-    const play=pick(h,field,rev,opp);
-    if(!play){cp++;if(cp>=active.length-1&&field){field=null;cp=0}cur=(cur+1)%active.length;continue}
-    cp=0;const[n2,sz]=play;h[n2]-=sz;field=[n2,sz];
-    if(sz===4)rev=!rev;
-    if(r8&&n2===8){field=null;cp=0;if(sum(h)===0){rnk.push(pid);active.splice(active.indexOf(pid),1);if(active.length)cur=cur%active.length}continue}
-    if(sum(h)===0){rnk.push(pid);active.splice(active.indexOf(pid),1);field=null;cp=0;if(active.length)cur=cur%active.length;continue}
+    const play=pick(h,field,rev,opp,rRev);
+    if(!play){ cp++; if(cp>=active.length-1&&field){field=null;cp=0;} cur=(cur+1)%active.length; continue; }
+    cp=0; const[n2,sz]=play; h[n2]-=sz; field=[n2,sz];
+    if(sz===4&&rRev)rev=!rev;
+    if(r8&&n2===8){ field=null;cp=0; if(sum(h)===0){rnk.push(pid);active.splice(active.indexOf(pid),1);if(active.length)cur=cur%active.length;} continue; }
+    if(sum(h)===0){ rnk.push(pid);active.splice(active.indexOf(pid),1);field=null;cp=0;if(active.length)cur=cur%active.length; continue; }
     cur=(cur+1)%active.length;
   }
   for(const p of active)if(!rnk.includes(p))rnk.push(p);
   return rnk;
 }
-function mc(hand,np,r8,trials){
+function mc(hand,np,r8,rRev,trials){
   const cnt=Object.fromEntries(Array.from({length:np},(_,i)=>[i+1,0]));
-  for(let i=0;i<trials;i++){const r=simOnce(hand,np,r8);const rank=r.includes(0)?r.indexOf(0)+1:np;cnt[rank]++}
+  for(let i=0;i<trials;i++){
+    const r=simOnce(hand,np,r8,rRev);
+    const rank=r.includes(0)?r.indexOf(0)+1:np;
+    cnt[rank]++;
+  }
   return Object.fromEntries(Object.entries(cnt).map(([k,v])=>[+k,Math.round(v/trials*1000)/10]));
 }
 
-// ── 実行 ──
+// ── 実行 ─────────────────────────────────────────────
 function run(){
   const tot=NUMS.reduce((s,n)=>s+HC[n],0);
-  if(!tot){alert('手札を入力してください');return}
+  if(!tot){ alert('手札を入力してください'); return; }
   const np=+document.getElementById('numP').value;
   const r8=document.getElementById('r8').checked;
+  const rRev=document.getElementById('rRev').checked;
   const btn=document.getElementById('runBtn');
   const spin=document.getElementById('spin');
-  const lbl=document.getElementById('runL');
-  btn.disabled=true;spin.style.display='block';
-  lbl.textContent=mode==='mc'?'計算中...':'分析中...';
+  btn.disabled=true; spin.style.display='block';
+  document.getElementById('runL').textContent = mode==='mc'?'計算中...':'分析中...';
   const bar=document.getElementById('pbar');
   let prog=0;
-  const iv=setInterval(()=>{prog=Math.min(prog+(100-prog)*.07,88);bar.style.width=prog+'%'},80);
+  const iv=setInterval(()=>{ prog=Math.min(prog+(100-prog)*.07,88); bar.style.width=prog+'%'; },80);
   setTimeout(()=>{
     const hand={...HC};
-    let rates;
-    if(mode==='mc'){
-      const trials=+document.getElementById('trials').value;
-      rates=mc(hand,np,r8,trials);
-    }else{
-      rates=scoreMode(hand,np,r8);
-    }
-    clearInterval(iv);bar.style.width='100%';
-    setTimeout(()=>{bar.style.width='0'},600);
-    btn.disabled=false;spin.style.display='none';lbl.textContent='分析する';
-    render(rates,np,r8,hand);
+    const rates = mode==='mc'
+      ? mc(hand,np,r8,rRev,+document.getElementById('trials').value)
+      : scoreMode(hand,np,r8,rRev);
+    clearInterval(iv); bar.style.width='100%';
+    setTimeout(()=>{ bar.style.width='0'; },600);
+    btn.disabled=false; spin.style.display='none';
+    document.getElementById('runL').textContent='分析する';
+    render(rates,np,r8,rRev,hand);
   },50);
 }
 
-// ── 描画 ──
-function render(rates,np,r8,hand){
+// ── 描画 ─────────────────────────────────────────────
+function render(rates,np,r8,rRev,hand){
   const names=RNAMES[np];
-  document.getElementById('modeNote').textContent=
-    mode==='mc'
-      ?`モンテカルロ ${document.getElementById('trialN').textContent}試行`
-      :'スコアモード（即時計算）';
+  document.getElementById('modeChip').textContent =
+    mode==='mc' ? `モンテカルロ ${document.getElementById('trialN').textContent}試行` : 'スコアモード（即時）';
 
   // rank boxes
-  const rb=document.getElementById('rboxes');rb.innerHTML='';
+  const rb=document.getElementById('rboxes'); rb.innerHTML='';
   for(let r=1;r<=np;r++){
     const b=document.createElement('div');
-    b.className=`rbox ${BCLS[r]}`;b.style.animationDelay=`${(r-1)*.07}s`;
+    b.className=`rbox ${BCLS[r]}`; b.style.animationDelay=`${(r-1)*.06}s`;
     b.innerHTML=`<div class="rb-rank">${r}位</div>
-      <div class="rb-pct">${rates[r]}<small style="font-size:13px;font-family:var(--fb)">%</small></div>
+      <div class="rb-pct">${rates[r]}<small style="font-size:0.75rem;font-family:var(--font)">%</small></div>
       <div class="rb-name">${names[r]}</div>`;
     rb.appendChild(b);
   }
 
   // bars
-  const bars=document.getElementById('bars');bars.innerHTML='';
+  const bars=document.getElementById('bars'); bars.innerHTML='';
   for(let r=1;r<=np;r++){
-    const d=document.createElement('div');d.className='bitem';
-    d.innerHTML=`<div class="bhead"><span>${names[r]}</span><span style="font-family:var(--fm)">${rates[r]}%</span></div>
+    const d=document.createElement('div'); d.className='bitem';
+    d.innerHTML=`<div class="bhead"><span>${names[r]}</span>
+      <span style="font-family:var(--mono);font-weight:700;color:var(--txt)">${rates[r]}%</span></div>
       <div class="btrack"><div class="bfill" style="background:${BCOL[r]}" data-w="${rates[r]}"></div></div>`;
     bars.appendChild(d);
   }
-  setTimeout(()=>document.querySelectorAll('.bfill[data-w]').forEach(el=>{el.style.width=el.dataset.w+'%'}),80);
+  setTimeout(()=>document.querySelectorAll('.bfill[data-w]').forEach(el=>{ el.style.width=el.dataset.w+'%'; }),80);
 
-  renderAdv(rates,np,hand,r8);
-  const el=document.getElementById('result');el.style.display='block';
+  renderAdv(rates,np,hand,r8,rRev);
+  const el=document.getElementById('result'); el.style.display='block';
   el.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-function renderAdv(rates,np,hand,r8){
-  const adv=document.getElementById('adv');adv.innerHTML='';
+function renderAdv(rates,np,hand,r8,rRev){
+  const adv=document.getElementById('adv'); adv.innerHTML='';
   const pos=document.getElementById('myPos').value;
   const fours=NUMS.filter(n=>n!==16&&(hand[n]||0)>=4);
   const pairs=NUMS.filter(n=>(hand[n]||0)>=2).length;
   const high=NUMS.filter(n=>n>=14).reduce((s,n)=>s+(hand[n]||0),0);
-  const joker=hand[16]||0;const has8=(hand[8]||0)>0&&r8;
-  const p1=rates[1],p2=rates[2]||0;
+  const joker=hand[16]||0;
+  const has8=(hand[8]||0)>0&&r8;
+  const p1=rates[1], p2=rates[2]||0;
 
-  // 役職
+  // 役職アドバイス
   let ph=`<div class="atitle">役職別アドバイス</div>`;
   if(pos==='富豪'){
-    ph+=`<div class="aitem"><span class="badge">富豪キープ率</span><strong>${p1}%</strong> `;
+    ph+=`<div class="aitem"><span class="badge">富豪キープ率</span><strong>${p1}%</strong>　`;
     ph+=p1<35?'都落ちリスク高。序盤から強カード・8切りで主導権を取り、最短上がりを狙う。':'安定圏内。中位手から丁寧に通し、強カードは終盤の切り札として温存。';
     ph+='</div>';
   }else if(pos==='貧民'){
     const esc=Math.round((p1+p2)*10)/10;
-    ph+=`<div class="aitem"><span class="badge">脱出率（上位2位以内）</span><strong>${esc}%</strong> `;
-    ph+=esc<35?'苦戦必至。革命狙いや多枚数出しで勝負する。':'下克上の好機。相手が強カードを使い合う隙にコンボで一気に駆け上がる。';
+    ph+=`<div class="aitem"><span class="badge">脱出率（上位2位以内）</span><strong>${esc}%</strong>　`;
+    ph+=esc<35?'苦戦必至。革命が狙えるなら盤面破壊のワンチャンを。多枚数出しで勝負する。':'下克上の好機。相手が強カードを使い合う隙に、コンボで一気に駆け上がる。';
     ph+='</div>';
   }else{
     const sur=Math.round((p1+p2)*10)/10;
-    ph+=`<div class="aitem"><span class="badge">平民以上キープ率</span><strong>${sur}%</strong> `;
+    ph+=`<div class="aitem"><span class="badge">平民以上キープ率</span><strong>${sur}%</strong>　`;
     ph+=sur<55?'転落リスクあり。2位確保を優先。ペアを確実に処理して最後まで生き残る。':'現状維持圏内。富豪同士を競わせ、疲弊した隙に安全に上がりを確定させる。';
     ph+='</div>';
   }
-  const pb=document.createElement('div');pb.className='abox';pb.style.animationDelay='0s';
-  pb.innerHTML=ph;adv.appendChild(pb);
+  const pb=document.createElement('div'); pb.className='abox'; pb.style.animationDelay='0s';
+  pb.innerHTML=ph; adv.appendChild(pb);
 
   // 手札アドバイス
   const tips=[];
-  if(fours.length){
+  if(rRev&&fours.length){
     const fn=fours.map(n=>D[n]).join('・');
-    tips.push({b:`革命 ${fn}`,c:'',t:`<strong>${fn}の4枚組</strong>保持。革命後は強弱逆転。残り手の数字を確認してから出すタイミングを見極める。`});
-    if(fours.length>=2)tips.push({b:'革命返し可',c:'',t:'4枚組複数あり。<strong>相手の革命に対してより弱い数字の4枚組で返せる</strong>。どちらを温存するか決めておく。'});
+    tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${fn}の4枚組</strong>を保持。革命後は強弱逆転。残り手の数字を確認してから出すタイミングを見極める。`});
+    if(fours.length>=2) tips.push({b:'革命返し可',c:'y',t:'4枚組複数あり。<strong>相手の革命に対してより弱い数字の4枚組で返せる</strong>。どちらを温存するか決めておく。'});
   }
-  if(joker)tips.push({b:`JKR×${joker}`,c:'g',t:'スペード3返しなしのため終盤まで最強。<strong>2や強カードへのカウンターに温存</strong>推奨。'});
-  if(has8)tips.push({b:'8切り',c:'b',t:'相手の連打を断ち切れる。<strong>強手が続く場面で流したい時</strong>が使いどころ。'});
-  if(pairs>=4)tips.push({b:`ペア×${pairs}`,c:'b',t:`ペアが豊富。<strong>ペア縛りの場を自分で作る</strong>と有利。2枚出しをリードする。`});
-  if(high===0)tips.push({b:'強カードなし',c:'r',t:'終盤の制圧カードがない。<strong>序盤から多枚数出しで枚数を削る</strong>戦術が有効。'});
-  if(!tips.length)tips.push({b:'バランス',c:'b',t:'手札バランスが良い。<strong>状況に応じて強弱を使い分け</strong>ながら立ち回る。'});
+  if(joker) tips.push({b:`JKR×${joker}`,c:'g',t:'スペード3返しなしのため終盤まで最強。<strong>2や強カードへのカウンターに温存</strong>推奨。'});
+  if(has8) tips.push({b:'8切り',c:'',t:'相手の連打を断ち切れる。<strong>強手が続く場面で流したい時</strong>が使いどころ。'});
+  if(pairs>=4) tips.push({b:`ペア×${pairs}`,c:'',t:`ペアが豊富。<strong>ペア縛りの場を自分で作る</strong>と有利。2枚出しをリードする。`});
+  if(high===0) tips.push({b:'強カードなし',c:'r',t:'終盤の制圧カードがない。<strong>序盤から多枚数出しで枚数を削る</strong>戦術が有効。'});
+  if(!tips.length) tips.push({b:'バランス',c:'',t:'手札バランスが良い。<strong>状況に応じて強弱を使い分け</strong>ながら立ち回る。'});
 
   let th=`<div class="atitle">手札別の戦術ポイント</div>`;
-  for(const t of tips)th+=`<div class="aitem"><span class="badge ${t.c}">${t.b}</span>${t.t}</div>`;
-  const tb=document.createElement('div');tb.className='abox';tb.style.animationDelay='.08s';
-  tb.innerHTML=th;adv.appendChild(tb);
+  for(const t of tips) th+=`<div class="aitem"><span class="badge ${t.c}">${t.b}</span>${t.t}</div>`;
+  const tb=document.createElement('div'); tb.className='abox'; tb.style.animationDelay='.07s';
+  tb.innerHTML=th; adv.appendChild(tb);
 
-  // モード比較ヒント（スコアモード時のみ）
   if(mode==='score'){
-    const hb=document.createElement('div');hb.className='abox';hb.style.animationDelay='.16s';
+    const hb=document.createElement('div'); hb.className='abox'; hb.style.animationDelay='.14s';
     hb.innerHTML=`<div class="atitle">精度を上げたい場合</div>
       <div class="aitem">スコアモードは即時計算ですが数式による近似です。より正確な確率が必要な場合は<strong>モンテカルロモード（500回以上推奨）</strong>に切り替えてください。</div>`;
     adv.appendChild(hb);
