@@ -604,6 +604,40 @@ function avgRevRk(hand,used,nr){
   return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;
 }
 
+// ── 手番効率ユーティリティ ────────────────────────────────
+// 手札を最短手番で捌くのに必要な手番数を計算
+// 各数字について「何枚持っているか」を1ブロック=1手番として合計
+// バラ牌(1枚)=1手番1枚, ペア=1手番2枚, トリプル=1手番3枚, 4枚=1手番4枚
+function calcMinTurns(hand){
+  let turns=0;
+  for(const n of NUMS){ if(hand[n]||0) turns++; }
+  return turns;
+}
+// 1手番あたりの平均消化枚数（高いほど効率的）
+function handEfficiency(hand){
+  const tot=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
+  const turns=calcMinTurns(hand);
+  return turns>0 ? tot/turns : 0;
+}
+// あるカードを出した後の残り手のefficiencyを計算
+function effAfterPlay(hand,num,sz,jUsed){
+  const after={};
+  for(const n of NUMS) after[n]=hand[n]||0;
+  if(num===16){ after[16]-=sz; }
+  else{ after[num]-=sz-jUsed; after[16]-=(jUsed||0); }
+  return handEfficiency(after);
+}
+// 残り手のバラ牌比率（0=全部コンボ、1=全部バラ）
+function looseRatio(hand){
+  let loose=0,total=0;
+  for(const n of NUMS){
+    const c=hand[n]||0; if(!c) continue;
+    total+=c;
+    if(c===1) loose+=1;
+  }
+  return total>0 ? loose/total : 0;
+}
+
 // pick() 返り値: [num, sz, jokerUsed]
 function pick(hand,field,rev,opp,rRev){
   const tot=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
@@ -613,18 +647,19 @@ function pick(hand,field,rev,opp,rRev){
   const mx=NUMS.length-1;
   const joker=hand[16]||0;
 
-  // #2: 終盤判定
   const lateGame  = tot <= 6;
   const ultraLate = tot <= 3;
 
+  // 現在の手の効率指標
+  const curEff = handEfficiency(hand);
+  const curLoose = looseRatio(hand);
+
   const cands=[];
 
-  // 革命候補: 4枚組 or (実際に3枚持っている+JKR1枚以上)
   const hasRev4  = rRev && NUMS.some(n=>n!==16&&(hand[n]||0)>=4);
   const hasRev3j = rRev && joker>=1 && NUMS.some(n=>n!==16&&(hand[n]||0)>=3);
   const hasRevPlan = hasRev4 || hasRev3j;
 
-  // 革命後残り手の強さ（excludeNumのcnt枚+JKR useJoker枚除外）
   function postRevStr(excludeNum, useCnt, useJoker){
     let s=0,c=0;
     for(const n of NUMS){
@@ -641,9 +676,6 @@ function pick(hand,field,rev,opp,rRev){
     if(num===16) continue;
     const cnt=hand[num]||0; if(!cnt) continue;
 
-    // 場なし: JKR補完なし、1〜cnt枚
-    // 場あり: field[1]枚ちょうど、JKR補完可
-    // 革命(sz=4): 場なしでも cnt>=2 かつ JKR補完で4枚になるなら候補追加
     const sizes=[];
     if(field){
       const sz=field[1];
@@ -658,26 +690,43 @@ function pick(hand,field,rev,opp,rRev){
       if(!cpOk(num,sz,field,rev)) continue;
       const r=rk(num,rev); const nr=r/mx; let sc=0;
 
-      // ── 基本スコア ──
-      // 場なし: 弱いカードから出す（枚数消化）。危険時は強いカード。
-      // 場あり: 最小ランクで返す。危険時は強いカードも投入。
-      sc += sz*10;
-      if(cnt===sz&&jUsed===0) sc+=30;
-      if(sz===3&&nr<0.7) sc+=8; // 低〜中ランクのトリプル縛りは有効
+      // ── ① 枚数消化ボーナス（手番1回あたり多く捌けるほど高評価）──
+      sc += sz * 12;
+      // そのカードを丸ごと出し切る（ブロック消去）ボーナス
+      if(cnt===sz&&jUsed===0) sc += 35;
 
+      // ── ② 出した後の手番効率スコア ──
+      const afterEff = effAfterPlay(hand, num, sz, jUsed);
+      // 効率が上がる（または維持）なら加点、下がるなら減点
+      const effDelta = afterEff - curEff;
+      sc += effDelta * 20;
+      // 絶対効率が高いほど良い（2枚/手番より3枚/手番の残り手の方が優秀）
+      sc += afterEff * 15;
+
+      // ── ③ バラ牌ペナルティ（残り手のバラ比率が増えると損） ──
+      const after={};
+      for(const n of NUMS) after[n]=hand[n]||0;
+      if(num===16){ after[16]-=sz; }
+      else{ after[num]-=sz-(jUsed||0); after[16]-=(jUsed||0); }
+      const afterLoose = looseRatio(after);
+      // バラ牌が増える出し方は強くペナルティ
+      const looseDelta = afterLoose - curLoose;
+      sc -= looseDelta * 35;
+
+      // ── ④ 場なし / 場あり 別スコア ──
       if(field===null){
         if(tot<=5||danger){
-          sc+=nr*35+10; // 残り少なければ強カード優先
+          sc += nr*35+10;
         } else {
-          // 弱いカードを優先しつつ、コンボ（ペア・トリプル）は積極的に出す
-          sc+=(1-nr)*18;
-          if(nr>0.77) sc-=22;
-          if(cnt>=2 && nr<0.6) sc+=cnt*8;
-          if(cnt>=2 && nr>=0.6) sc+=cnt*2;
-          if(tot<=10) sc+=nr*10;
+          // 弱いカードから出す基本方針
+          sc += (1-nr)*18;
+          if(nr>0.77) sc -= 20;
+          // ペア・トリプルは手番効率が高いので積極的に
+          if(sz>=2 && nr<0.65) sc += sz*10;
+          if(sz>=2 && nr>=0.65) sc += sz*3;
+          if(tot<=10) sc += nr*8;
         }
       } else {
-        // 場あり: 最小ランク差で返す。危険時は強カード。
         const rd=rk(num,rev)-rk(field[0],rev);
         if(rd===1) sc+=28;
         else if(rd===2) sc+=20;
@@ -687,46 +736,45 @@ function pick(hand,field,rev,opp,rRev){
         else sc-=nr*8;
       }
 
-      // ── 革命スコア ──
+      // ── ⑤ 革命スコア ──
       if(sz===4&&rRev){
         const ps=postRevStr(num,cnt-jUsed,jUsed);
-        if(ps>=0.5){
-          sc+=(ps-0.5)*60; // 残り手が強いほど加点
-        } else {
-          sc-=(0.5-ps)*60; // 残り手が弱ければ大きくペナルティ
-        }
-        if(jUsed>=2) sc-=45; // JKR2枚消費は大損
+        if(ps>=0.5){ sc+=(ps-0.5)*60; }
+        else { sc-=(0.5-ps)*60; }
+        if(jUsed>=2) sc-=45;
         else if(jUsed===1) sc-=12;
         if(danger) sc+=20;
       }
 
-      // ── ペア/トリプル崩しペナルティ ──
-      if(cnt>=2&&sz===1&&cnt<=3&&jUsed===0) sc-=28;
-      if(cnt===3&&sz===2&&jUsed===0) sc-=10;
-      if(cnt===4&&sz>=1&&sz<=3&&jUsed===0) sc-=18;
+      // ── ⑥ コンボ崩しペナルティ（手番効率を下げる出し方を抑制） ──
+      // ペアをバラ出しする（cnt>=2 なのに sz=1 で出す）
+      if(cnt>=2&&sz===1&&cnt<=3&&jUsed===0) sc-=32;
+      // トリプルを2枚出しで崩す
+      if(cnt===3&&sz===2&&jUsed===0) sc-=14;
+      // 4枚組を半端に出す
+      if(cnt===4&&sz>=1&&sz<=3&&jUsed===0) sc-=22;
 
-      // #7B: 2（num===15）は終盤まで温存
+      // 2（num===15）は終盤まで温存
       if(num===15 && lateGame && sz<cnt) sc-=2.0;
 
       cands.push([sc,num,sz,jUsed]);
     }
   }
 
-  // JKR単体出し（場あり1枚出しのみ）
+  // JKR単体出し
   if(joker>0&&field&&field[1]===1){
     const nr=rk(16,rev)/mx; let sc=nr*50;
-    if(ultraLate) sc+=45;        // #7C: 残り3枚以内は積極使用
+    if(ultraLate) sc+=45;
     else if(tot<=2) sc+=45;
     else if(danger) sc+=55;
-    else if(lateGame) sc-=10;    // #7C: 終盤でも温存寄り
-    else sc-=25;                 // 通常は強く温存
+    else if(lateGame) sc-=10;
+    else sc-=25;
     if(hasRev3j) sc-=20;
     cands.push([sc,16,1,0]);
   } else if(joker>0&&!field){
     if(ultraLate && tot<=2){
-      cands.push([rk(16,rev)/mx*45+35,16,1,0]); // #7C: ラスト2枚なら上がりに使う
+      cands.push([rk(16,rev)/mx*45+35,16,1,0]);
     }
-    // それ以外の場なしJKR単体出しは候補に追加しない（温存）
   }
 
   if(!cands.length) return null;
