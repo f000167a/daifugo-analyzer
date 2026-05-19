@@ -133,22 +133,6 @@ select:focus { border-color: var(--acc); outline: 2px solid var(--acc-lt); }
 .chk.off { opacity: .35; pointer-events: none; }
 .chk-note { font-size: 0.72rem; color: var(--txt3); margin-left: auto; }
 
-/* ── モードトグル ── */
-.mtog {
-  display: flex; border: 1px solid var(--bdr2);
-  border-radius: var(--r); overflow: hidden; background: var(--bg2);
-  margin-bottom: 10px;
-}
-.mbtn {
-  flex: 1; padding: 10px 14px; background: transparent; border: none;
-  cursor: pointer; font-family: var(--font); font-size: 0.93rem; color: var(--txt2);
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  transition: all .18s; border-right: 1px solid var(--bdr);
-}
-.mbtn:last-child { border-right: none; }
-.mbtn.on { background: var(--white); color: var(--acc-dk); font-weight: 700; box-shadow: var(--shadow); }
-.mbtn small { font-size: 0.72rem; color: var(--txt3); }
-.mbtn.on small { color: var(--acc); }
 
 /* ── スライダー ── */
 .srow { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
@@ -355,18 +339,14 @@ input[type=range]::-webkit-slider-thumb {
     <div class="g2">
       <div class="card">
         <div class="fl">プレイヤー人数</div>
-        <select id="numP">
+        <select id="numP" onchange="buildPosOpts()">
           <option value="3" selected>3人</option>
           <option value="4">4人</option>
           <option value="5">5人</option>
         </select>
         <div style="margin-top:12px">
           <div class="fl">現在の役職（アドバイス用）</div>
-          <select id="myPos">
-            <option value="平民">平民（初戦）</option>
-            <option value="富豪">富豪</option>
-            <option value="貧民">貧民</option>
-          </select>
+          <select id="myPos"></select>
         </div>
       </div>
       <div class="card">
@@ -391,25 +371,6 @@ input[type=range]::-webkit-slider-thumb {
     </div>
   </div>
 
-  <!-- 計算モード -->
-  <div style="margin-bottom:16px">
-    <div class="st" style="margin-bottom:10px">計算モード</div>
-    <div class="mtog">
-      <button class="mbtn on" id="mScore" onclick="setMode('score')">
-        スコアモード<small>即時・軽量</small>
-      </button>
-      <button class="mbtn" id="mMC" onclick="setMode('mc')">
-        モンテカルロ<small>統計的・精度高め</small>
-      </button>
-    </div>
-    <div class="card" id="trialCard" style="display:none">
-      <div class="fl">試行回数</div>
-      <div class="srow">
-        <input type="range" id="trials" min="200" max="1000" step="100" value="500">
-        <div class="snum"><span id="trialN">500</span> 回</div>
-      </div>
-    </div>
-  </div>
 
   <!-- 手札入力 -->
   <div style="margin-bottom:0">
@@ -422,9 +383,16 @@ input[type=range]::-webkit-slider-thumb {
             <span class="total-num" id="tot">0</span> 枚
           </span>
         </div>
-        <button class="rand-btn" onclick="randHand()">🎲 ランダム配布</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div id="handCountWrap" style="display:none;align-items:center;gap:6px">
+            <span style="font-size:0.82rem;color:var(--txt2)">自分の枚数</span>
+            <select id="handCount" style="width:auto;padding:5px 24px 5px 8px;font-size:0.87rem" onchange="updateHandHint()">
+            </select>
+          </div>
+          <button class="rand-btn" onclick="randHand()">🎲 ランダム配布</button>
+        </div>
       </div>
-      <div class="hand-hint">
+      <div class="hand-hint" id="handHint">
         強さ順（通常時）: 3 &lt; 4 &lt; 5 &lt; 6 &lt; 7 &lt; 8 &lt; 9 &lt; 10 &lt; J &lt; Q &lt; K &lt; A &lt; 2 &lt; <b>JKR</b>
         　／　JKR最大2枚、その他最大4枚
       </div>
@@ -451,6 +419,15 @@ input[type=range]::-webkit-slider-thumb {
     <div id="adv"></div>
   </div>
 
+  <!-- 戦術指南 -->
+  <div style="margin-top:24px">
+    <div class="st" style="margin-bottom:10px">戦術指南</div>
+    <div id="gameplan" style="display:none"></div>
+    <div id="gameplanEmpty" class="card" style="color:var(--txt2);font-size:0.87rem">
+      手札を入力して「分析する」を押すと、この手札でどう動くべきかの指南が表示されます。
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -466,27 +443,84 @@ const CDEFS= [
 ];
 // 役職名（大富豪→富豪、大貧民→貧民）
 const RNAMES = {
-  3: {1:'富豪',  2:'平民', 3:'貧民'},
-  4: {1:'大富豪',2:'富豪', 3:'貧民', 4:'大貧民'},
-  5: {1:'大富豪',2:'富豪', 3:'平民', 4:'貧民', 5:'大貧民'}
+  "3": {1:'富豪',  2:'平民', 3:'貧民'},
+  "4": {1:'富豪',  2:'平民', 3:'平民', 4:'貧民'},
+  "5": {1:'富豪',  2:'平民', 3:'平民', 4:'平民', 5:'貧民'}
 };
+// 役職選択肢定義（人数別）
+const POS_OPTS = {
+  "3": [
+    {v:'平民0', l:'平民（初戦）'},
+    {v:'富豪',  l:'富豪（前回1位）'},
+    {v:'平民',  l:'平民（前回2位）'},
+    {v:'貧民',  l:'貧民（前回3位）'}
+  ],
+  "4": [
+    {v:'平民0', l:'平民（初戦）'},
+    {v:'富豪',  l:'富豪（前回1位）'},
+    {v:'平民',  l:'平民（前回2〜3位）'},
+    {v:'貧民',  l:'貧民（前回4位）'}
+  ],
+  "5": [
+    {v:'平民0', l:'平民（初戦）'},
+    {v:'富豪',  l:'富豪（前回1位）'},
+    {v:'平民',  l:'平民（前回2〜4位）'},
+    {v:'貧民',  l:'貧民（前回5位）'}
+  ]
+};
+function buildPosOpts(){
+  const np = +document.getElementById('numP').value;
+  const sel = document.getElementById('myPos');
+  const cur = sel.value;
+  sel.innerHTML = '';
+  for(const o of POS_OPTS[np]){
+    const op = document.createElement('option');
+    op.value = o.v; op.textContent = o.l;
+    if(o.v === cur) op.selected = true;
+    sel.appendChild(op);
+  }
+  // 枚数セレクタ更新
+  const wrap = document.getElementById('handCountWrap');
+  const hc = document.getElementById('handCount');
+  const base = Math.floor(54/np);
+  const extra = 54 % np;
+  if(extra === 0){
+    // 割り切れる（3人=18枚固定）→セレクタ不要
+    wrap.style.display = 'none';
+  } else {
+    wrap.style.display = 'flex';
+    const prev = hc.value;
+    hc.innerHTML = '';
+    // 少ない方（base枚）と多い方（base+1枚）
+    [base, base+1].forEach(n => {
+      const op = document.createElement('option');
+      op.value = n; op.textContent = n + '枚';
+      if(String(n) === prev) op.selected = true;
+      hc.appendChild(op);
+    });
+    // デフォルト：base+1（余りが先頭プレイヤーに来るケース）
+    if(!prev || (prev !== String(base) && prev !== String(base+1))) hc.value = base+1;
+  }
+  updateHandHint();
+}
+function updateHandHint(){
+  const np = +document.getElementById('numP').value;
+  const base = Math.floor(54/np);
+  const extra = 54 % np;
+  const hint = document.getElementById('handHint');
+  if(extra === 0){
+    hint.innerHTML = `強さ順（通常時）: 3 &lt; 4 &lt; 5 &lt; 6 &lt; 7 &lt; 8 &lt; 9 &lt; 10 &lt; J &lt; Q &lt; K &lt; A &lt; 2 &lt; <b>JKR</b>　／　手札 <b>${base}枚</b>　JKR最大2枚、その他最大4枚`;
+  } else {
+    const chosen = +document.getElementById('handCount').value;
+    hint.innerHTML = `強さ順（通常時）: 3 &lt; 4 &lt; 5 &lt; 6 &lt; 7 &lt; 8 &lt; 9 &lt; 10 &lt; J &lt; Q &lt; K &lt; A &lt; 2 &lt; <b>JKR</b>　／　手札 <b>${chosen}枚</b>（${np}人時は${base}か${base+1}枚）　JKR最大2枚、その他最大4枚`;
+  }
+}
 // バーの色（JSONデータカラー準拠）
 const BCOL = {1:'#AC3E00',2:'#FB5B01',3:'#CCCCCC',4:'#C0392B',5:'#C0392B'};
 const BCLS = {1:'r1',2:'r2',3:'r3',4:'rl',5:'rl'};
 
 function rk(n,rev){ return n===16 ? NUMS.length-1 : (rev?RR:NR)[n]; }
 
-// ── モード ────────────────────────────────────────────
-let mode='score';
-function setMode(m){
-  mode=m;
-  document.getElementById('mScore').classList.toggle('on',m==='score');
-  document.getElementById('mMC').classList.toggle('on',m==='mc');
-  document.getElementById('trialCard').style.display = m==='mc'?'block':'none';
-}
-document.getElementById('trials').oninput = function(){
-  document.getElementById('trialN').textContent = this.value;
-};
 
 // ── 手札管理 ──────────────────────────────────────────
 const HC = Object.fromEntries(NUMS.map(n=>[n,0]));
@@ -538,11 +572,11 @@ function updPrev(){
   }
 }
 buildGrid();
+buildPosOpts();
 
 // ── ランダム配布 ──────────────────────────────────────
 function randHand(){
   const np = +document.getElementById('numP').value;
-  const perP = Math.floor(54/np);
   const deck = [];
   for(let n=3;n<=15;n++) for(let i=0;i<4;i++) deck.push(n);
   deck.push(16,16);
@@ -550,172 +584,272 @@ function randHand(){
     const j=Math.floor(Math.random()*(i+1));
     [deck[i],deck[j]]=[deck[j],deck[i]];
   }
+  // 枚数セレクタがある場合はその値、なければ均等配布の枚数
+  const base = Math.floor(54/np);
+  const extra = 54 % np;
+  const myCount = extra===0 ? base : +document.getElementById('handCount').value;
   const hand = Object.fromEntries(NUMS.map(n=>[n,0]));
-  for(let i=0;i<perP;i++) hand[deck[i]]++;
+  for(let i=0;i<myCount;i++) hand[deck[i]]++;
   setHand(hand);
 }
 
-// ── スコアモード ──────────────────────────────────────
-function scoreMode(hand,np,r8,rRev){
-  function ns(n){ return n===16?1.0:NR[n]/12; }
-  let sc=0; const fours=[]; let joker=hand[16]||0, pairs=0;
-  for(const n of NUMS){
-    const c=hand[n]||0; if(!c) continue;
-    const s=ns(n); sc+=s*c*3.0;
-    if(c>=2){ pairs++; sc+=0.25; }
-    if(c>=3) sc+=0.55;
-    if(c>=4&&rRev){
-      fours.push(n);
-      const postRevB=(1-ns(n))*1.2;
-      const rem=Object.fromEntries(NUMS.map(k=>[k,k===n?0:hand[k]||0]));
-      const remTot=NUMS.reduce((s,k)=>s+(rem[k]||0),0)||1;
-      const postAvg=NUMS.reduce((s,k)=>{
-        const rc=rem[k]; if(!rc) return s;
-        return s+(k===16?1.0:(12-NR[k])/12)*rc;
-      },0)/remTot;
-      sc += 0.8+postRevB+postAvg*0.6;
-    }
-  }
-  if(joker>0) sc+=joker*1.5;
-  if((hand[8]||0)>0&&r8) sc+=0.35;
-  const tot=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
-  const rat=tot/18;
-  if(rat<0.8)sc*=0.82; else if(rat<0.95)sc*=0.93; else if(rat>1.2)sc*=0.92;
-  const w=Math.min(.90,Math.max(.06,Math.tanh((sc/9.5-.9)*2.2)*.45+.42));
-  const rates={};
-  if(np===3){ rates[1]=w; rates[2]=Math.min(.96,(1-(1-w)**2)*.85+w*.1); rates[3]=Math.max(.02,(1-w)**2*.7); }
-  else if(np===4){ rates[1]=w; rates[2]=Math.min(.94,(1-(1-w)**3)*.6+w*.15); rates[3]=Math.min(.92,1-w-(rates[2]-w)*.5); rates[4]=Math.max(.01,(1-w)**3*.55); }
-  else{ rates[1]=w; rates[2]=Math.min(.90,(1-(1-w)**4)*.5+w*.1); rates[3]=Math.min(.85,1-w-rates[2]*.35); rates[4]=Math.min(.5,(1-w)**3*.45); rates[5]=Math.max(.01,(1-w)**4*.4); }
-  const sum=Object.values(rates).reduce((a,b)=>a+b,0);
-  for(const k in rates) rates[k]=Math.round(rates[k]/sum*1000)/10;
-  return rates;
-}
 
-// ── モンテカルロ ──────────────────────────────────────
+// ── モンテカルロ（都落ち・非同期分割版） ───────────────────
 function shuf(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a; }
+// cpOk: num×sz が場に出せるか（JKR補完済みのnumで判定）
 function cpOk(n,sz,f,rev){ if(!f)return true; return sz===f[1]&&rk(n,rev)>rk(f[0],rev); }
 function avgRevRk(hand,used,nr){
   const v=[];
   for(const n of NUMS){ const c=hand[n]||0; if(!c||n===used)continue; for(let i=0;i<c;i++)v.push(rk(n,nr)); }
   return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;
 }
+
+// pick() 返り値: [num, sz, jokerUsed]
 function pick(hand,field,rev,opp,rRev){
   const tot=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
-  const danger=opp.length&&Math.min(...opp)<=2;
+  const oppMin=opp.length?Math.min(...opp):99;
+  const danger=oppMin<=3;
+  const urgency=oppMin<=5;
   const mx=NUMS.length-1;
+  const joker=hand[16]||0;
 
   // #2: 終盤判定
   const lateGame  = tot <= 6;
   const ultraLate = tot <= 3;
 
   const cands=[];
+
+  // 革命候補: 4枚組 or (実際に3枚持っている+JKR1枚以上)
+  const hasRev4  = rRev && NUMS.some(n=>n!==16&&(hand[n]||0)>=4);
+  const hasRev3j = rRev && joker>=1 && NUMS.some(n=>n!==16&&(hand[n]||0)>=3);
+  const hasRevPlan = hasRev4 || hasRev3j;
+
+  // 革命後残り手の強さ（excludeNumのcnt枚+JKR useJoker枚除外）
+  function postRevStr(excludeNum, useCnt, useJoker){
+    let s=0,c=0;
+    for(const n of NUMS){
+      let cnt=hand[n]||0;
+      if(n===excludeNum) cnt=Math.max(0,cnt-useCnt);
+      if(n===16)         cnt=Math.max(0,cnt-useJoker);
+      if(!cnt) continue;
+      s+=rk(n,!rev)/mx*cnt; c+=cnt;
+    }
+    return c>0?s/c:0;
+  }
+
   for(const num of NUMS){
-    const cnt=hand[num]||0; if(!cnt)continue;
-    for(let sz=1;sz<=cnt;sz++){
-      if(!cpOk(num,sz,field,rev))continue;
+    if(num===16) continue;
+    const cnt=hand[num]||0; if(!cnt) continue;
+
+    // 場なし: JKR補完なし、1〜cnt枚
+    // 場あり: field[1]枚ちょうど、JKR補完可
+    // 革命(sz=4): 場なしでも cnt>=2 かつ JKR補完で4枚になるなら候補追加
+    const sizes=[];
+    if(field){
+      const sz=field[1];
+      const need=Math.max(0,sz-cnt);
+      if(need<=joker) sizes.push({sz,jUsed:need});
+    } else {
+      for(let sz=1;sz<=cnt;sz++) sizes.push({sz,jUsed:0});
+      if(rRev&&cnt>=2&&cnt<=3&&joker>=(4-cnt)) sizes.push({sz:4,jUsed:4-cnt});
+    }
+
+    for(const {sz,jUsed} of sizes){
+      if(!cpOk(num,sz,field,rev)) continue;
       const r=rk(num,rev); const nr=r/mx; let sc=0;
-      if(cnt===sz)sc+=35; sc+=sz*12;
-      if(tot<=4)sc+=nr*45+20;
-      else if(danger)sc+=nr*55;
-      else if(!field)sc-=nr*30;
-      else{
+
+      // ── 基本スコア ──
+      // 場なし: 弱いカードから出す（枚数消化）。危険時は強いカード。
+      // 場あり: 最小ランクで返す。危険時は強いカードも投入。
+      sc += sz*10;
+      if(cnt===sz&&jUsed===0) sc+=30;
+      if(sz===3&&nr<0.7) sc+=8; // 低〜中ランクのトリプル縛りは有効
+
+      if(field===null){
+        if(tot<=5||danger){
+          sc+=nr*35+10; // 残り少なければ強カード優先
+        } else {
+          // 弱いカードを優先しつつ、コンボ（ペア・トリプル）は積極的に出す
+          sc+=(1-nr)*18;
+          if(nr>0.77) sc-=22;
+          if(cnt>=2 && nr<0.6) sc+=cnt*8;
+          if(cnt>=2 && nr>=0.6) sc+=cnt*2;
+          if(tot<=10) sc+=nr*10;
+        }
+      } else {
+        // 場あり: 最小ランク差で返す。危険時は強カード。
         const rd=rk(num,rev)-rk(field[0],rev);
-        if(rd===1)sc+=25; else if(rd===2)sc+=18; else if(rd===3)sc+=12; else if(rd>=8)sc-=20;
-        sc-=nr*18;
+        if(rd===1) sc+=28;
+        else if(rd===2) sc+=20;
+        else if(rd===3) sc+=12;
+        else if(rd>=8) sc-=18;
+        if(danger||urgency) sc+=nr*45;
+        else sc-=nr*8;
       }
-      if(sz===4&&rRev){ const pn=avgRevRk(hand,num,!rev)/mx; sc+=20+pn*35; if(danger)sc+=25; }
-      if(cnt>=2&&sz===1&&cnt<=3)sc-=25;
-      if(cnt===3&&sz===2)sc-=15;
-      if(cnt===4&&sz>=1&&sz<=3)sc-=18;
+
+      // ── 革命スコア ──
+      if(sz===4&&rRev){
+        const ps=postRevStr(num,cnt-jUsed,jUsed);
+        if(ps>=0.5){
+          sc+=(ps-0.5)*60; // 残り手が強いほど加点
+        } else {
+          sc-=(0.5-ps)*60; // 残り手が弱ければ大きくペナルティ
+        }
+        if(jUsed>=2) sc-=45; // JKR2枚消費は大損
+        else if(jUsed===1) sc-=12;
+        if(danger) sc+=20;
+      }
+
+      // ── ペア/トリプル崩しペナルティ ──
+      if(cnt>=2&&sz===1&&cnt<=3&&jUsed===0) sc-=28;
+      if(cnt===3&&sz===2&&jUsed===0) sc-=10;
+      if(cnt===4&&sz>=1&&sz<=3&&jUsed===0) sc-=18;
 
       // #7B: 2（num===15）は終盤まで温存
       if(num===15 && lateGame && sz<cnt) sc-=2.0;
 
-      // #7C: JKRはラスト2枚以内まで温存
-      if(num===16){
-        if(ultraLate && tot===2) sc+=6.0;  // 残り2枚ならJKRで上がり狙い
-        else if(lateGame)        sc-=3.0;  // 終盤でも雑に切らない
-        else                     sc-=5.0;  // 序中盤は強く抑制
-      }
-
-      cands.push([sc,num,sz]);
+      cands.push([sc,num,sz,jUsed]);
     }
   }
-  if(!cands.length)return null;
+
+  // JKR単体出し（場あり1枚出しのみ）
+  if(joker>0&&field&&field[1]===1){
+    const nr=rk(16,rev)/mx; let sc=nr*50;
+    if(ultraLate) sc+=45;        // #7C: 残り3枚以内は積極使用
+    else if(tot<=2) sc+=45;
+    else if(danger) sc+=55;
+    else if(lateGame) sc-=10;    // #7C: 終盤でも温存寄り
+    else sc-=25;                 // 通常は強く温存
+    if(hasRev3j) sc-=20;
+    cands.push([sc,16,1,0]);
+  } else if(joker>0&&!field){
+    if(ultraLate && tot<=2){
+      cands.push([rk(16,rev)/mx*45+35,16,1,0]); // #7C: ラスト2枚なら上がりに使う
+    }
+    // それ以外の場なしJKR単体出しは候補に追加しない（温存）
+  }
+
+  if(!cands.length) return null;
   cands.sort((a,b)=>b[0]-a[0]);
-  return[cands[0][1],cands[0][2]];
+  return [cands[0][1],cands[0][2],cands[0][3]];
 }
-function simOnce(pH,np,r8,rRev){
+
+function simOnce(pH,np,r8,rRev,myPos){
   const full=[]; for(let n=3;n<=15;n++)for(let i=0;i<4;i++)full.push(n); full.push(16,16);
   const un=[...full];
   for(const n of NUMS){ const c=pH[n]||0; for(let i=0;i<c;i++){const idx=un.indexOf(n);if(idx!==-1)un.splice(idx,1);} }
   shuf(un);
+  // 余りカードを最後のプレイヤーへ均等分配（端数処理修正）
+  const others = np-1;
+  const perP = Math.floor(un.length/others);
   const players=[{...pH}];
-  for(let i=0;i<np-1;i++){
+  for(let i=0;i<others;i++){
     const h=Object.fromEntries(NUMS.map(n=>[n,0]));
-    for(const c of un.slice(i*18,(i+1)*18))h[c]++;
+    const start=i*perP;
+    const end = i===others-1 ? un.length : start+perP;
+    for(const c of un.slice(start,end))h[c]++;
     players.push(h);
   }
   const active=Array.from({length:np},(_,i)=>i);
-  const rnk=[]; let field=null,rev=false,cur=0,cp=0,turn=0;
+  const rnk=[]; let field=null,rev=false,cp=0,turn=0;
+  let cur = Math.floor(Math.random() * np);
+
   const sum=h=>NUMS.reduce((s,n)=>s+(h[n]||0),0);
-  while(active.length>1&&turn<2000){
+  while(active.length>1&&turn<1500){
     turn++;
     const pid=active[cur]; const h=players[pid];
     const opp=active.filter(j=>j!==pid).map(j=>sum(players[j]));
     const play=pick(h,field,rev,opp,rRev);
-    if(!play){ cp++; if(cp>=active.length-1&&field){field=null;cp=0;} cur=(cur+1)%active.length; continue; }
-    cp=0; const[n2,sz]=play; h[n2]-=sz; field=[n2,sz];
+    if(!play){ 
+      cp++; 
+      if(cp>=active.length-1&&field){field=null;cp=0;} 
+      cur=(cur+1)%active.length; 
+      continue; 
+    }
+    cp=0; const[n2,sz,jUsed]=play;
+    // カード消費：num×(sz-jUsed) + JKR×jUsed
+    if(n2===16){ h[16]-=sz; } // JKR単体出し
+    else{ h[n2]-=sz-jUsed; h[16]-=(jUsed||0); }
+    // fieldに記録するnumはn2（JKR補完でもベース数字で判定）
+    field=[n2,sz];
     if(sz===4&&rRev)rev=!rev;
-    if(r8&&n2===8){ field=null;cp=0; if(sum(h)===0){rnk.push(pid);active.splice(active.indexOf(pid),1);if(active.length)cur=cur%active.length;} continue; }
-    if(sum(h)===0){ rnk.push(pid);active.splice(active.indexOf(pid),1);field=null;cp=0;if(active.length)cur=cur%active.length; continue; }
+    if(r8&&n2===8){ 
+      field=null; cp=0; 
+      if(sum(h)===0){ rnk.push(pid); active.splice(active.indexOf(pid),1); }
+      if(active.length) cur=Math.floor(Math.random()*active.length);
+      continue; 
+    }
+    if(sum(h)===0){ 
+      rnk.push(pid);
+      active.splice(active.indexOf(pid),1);
+      field=null; cp=0; 
+      if(active.length) cur=Math.floor(Math.random()*active.length);
+      continue; 
+    }
     cur=(cur+1)%active.length;
   }
-  for(const p of active)if(!rnk.includes(p))rnk.push(p);
-  return rnk;
-}
-function mc(hand,np,r8,rRev,trials){
-  const cnt=Object.fromEntries(Array.from({length:np},(_,i)=>[i+1,0]));
-  for(let i=0;i<trials;i++){
-    const r=simOnce(hand,np,r8,rRev);
-    const rank=r.includes(0)?r.indexOf(0)+1:np;
-    cnt[rank]++;
+  for(const p of active) if(!rnk.includes(p)) rnk.push(p);
+
+  // 自分（pid=0）の着順を返す（1始まり）
+  let myRank = rnk.indexOf(0)+1;
+  
+  // 都落ちルール：富豪が1位以外→最下位
+  if(myPos === '富豪' && myRank !== 1) myRank = np;
+  // 平民（2回目以降）のみ：pid=1が前回富豪と仮定し、都落ちで順位繰り上がり
+  else if(myPos === '貧民' || myPos === '平民') {
+    const rivalRank = rnk.indexOf(1)+1;
+    if(rivalRank !== 1 && rivalRank < myRank) {
+      myRank = Math.max(1, myRank-1);
+    }
   }
-  return Object.fromEntries(Object.entries(cnt).map(([k,v])=>[+k,Math.round(v/trials*1000)/10]));
+  // 平民0（初戦）は都落ちなし・補正なし → myRankそのまま
+  
+  return myRank;
 }
 
-// ── 実行 ─────────────────────────────────────────────
+
+// ── 実行 ───────────────────────────────────────────────
+const TRIALS = 2000;
 function run(){
   const tot=NUMS.reduce((s,n)=>s+HC[n],0);
   if(!tot){ alert('手札を入力してください'); return; }
   const np=+document.getElementById('numP').value;
   const r8=document.getElementById('r8').checked;
   const rRev=document.getElementById('rRev').checked;
+  const myPos=document.getElementById('myPos').value;
   const btn=document.getElementById('runBtn');
   const spin=document.getElementById('spin');
+
   btn.disabled=true; spin.style.display='block';
-  document.getElementById('runL').textContent = mode==='mc'?'計算中...':'分析中...';
+  document.getElementById('runL').textContent='計算中...';
+
   const bar=document.getElementById('pbar');
-  let prog=0;
-  const iv=setInterval(()=>{ prog=Math.min(prog+(100-prog)*.07,88); bar.style.width=prog+'%'; },80);
-  setTimeout(()=>{
-    const hand={...HC};
-    const rates = mode==='mc'
-      ? mc(hand,np,r8,rRev,+document.getElementById('trials').value)
-      : scoreMode(hand,np,r8,rRev);
-    clearInterval(iv); bar.style.width='100%';
+  bar.style.width='0%';
+  const hand={...HC};
+
+  let done=0;
+  const cnt=Object.fromEntries(Array.from({length:np},(_,i)=>[i+1,0]));
+  function doChunk(){
+    const chunkSize=50;
+    for(let i=0;i<chunkSize&&done<TRIALS;i++){
+      cnt[simOnce(hand,np,r8,rRev,myPos)]++;
+      done++;
+    }
+    bar.style.width=(done/TRIALS*100)+'%';
+    if(done<TRIALS){ setTimeout(doChunk,0); return; }
+    const rates=Object.fromEntries(Object.entries(cnt).map(([k,v])=>[+k,Math.round(v/TRIALS*1000)/10]));
     setTimeout(()=>{ bar.style.width='0'; },600);
     btn.disabled=false; spin.style.display='none';
     document.getElementById('runL').textContent='分析する';
     render(rates,np,r8,rRev,hand);
-  },50);
+  }
+  doChunk();
 }
-
+   
 // ── 描画 ─────────────────────────────────────────────
 function render(rates,np,r8,rRev,hand){
   const names=RNAMES[np];
-  document.getElementById('modeChip').textContent =
-    mode==='mc' ? `モンテカルロ ${document.getElementById('trialN').textContent}試行` : 'スコアモード（即時）';
+  document.getElementById('modeChip').textContent = `モンテカルロ ${TRIALS}試行`;
 
   // rank boxes
   const rb=document.getElementById('rboxes'); rb.innerHTML='';
@@ -740,6 +874,7 @@ function render(rates,np,r8,rRev,hand){
   setTimeout(()=>document.querySelectorAll('.bfill[data-w]').forEach(el=>{ el.style.width=el.dataset.w+'%'; }),80);
 
   renderAdv(rates,np,hand,r8,rRev);
+  renderGamePlan(rates,np,hand,r8,rRev);
   const el=document.getElementById('result'); el.style.display='block';
   el.scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -748,57 +883,304 @@ function renderAdv(rates,np,hand,r8,rRev){
   const adv=document.getElementById('adv'); adv.innerHTML='';
   const pos=document.getElementById('myPos').value;
   const fours=NUMS.filter(n=>n!==16&&(hand[n]||0)>=4);
+  const triples=NUMS.filter(n=>n!==16&&(hand[n]||0)===3);
   const pairs=NUMS.filter(n=>(hand[n]||0)>=2).length;
-  const high=NUMS.filter(n=>n>=14).reduce((s,n)=>s+(hand[n]||0),0);
+  const pairNums=NUMS.filter(n=>(hand[n]||0)>=2);
+  const high=NUMS.filter(n=>n>=14).reduce((s,n)=>s+(hand[n]||0),0); // A,2,JKR合計
+  const has2=(hand[15]||0)>0;
+  const hasA=(hand[14]||0)>0;
   const joker=hand[16]||0;
   const has8=(hand[8]||0)>0&&r8;
-  const p1=rates[1], p2=rates[2]||0;
+  const lowOnly=NUMS.filter(n=>n<=7).reduce((s,n)=>s+(hand[n]||0),0);
+  const total=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
+  const highRatio=high/total;
+  const p1=rates[1], p2=rates[2]||0, pLast=rates[np]||0;
 
-  // 役職アドバイス
+  // ── 役職アドバイス ──
   let ph=`<div class="atitle">役職別アドバイス</div>`;
   if(pos==='富豪'){
     ph+=`<div class="aitem"><span class="badge">富豪キープ率</span><strong>${p1}%</strong>　`;
-    ph+=p1<35?'都落ちリスク高。序盤から強カード・8切りで主導権を取り、最短上がりを狙う。':'安定圏内。中位手から丁寧に通し、強カードは終盤の切り札として温存。';
+    if(p1>=60) ph+='盤石の手。序盤は温存しつつ中盤に主導権を確立。相手が強カードを使い果たしてから畳み掛ける。都落ちのリスクは低いが油断禁物。';
+    else if(p1>=40) ph+='安定圏内。中位手から丁寧に通し、強カードは終盤の切り札として温存。場の流れを読み、焦らずに確実な上がりを狙う。';
+    else if(p1>=25) ph+='やや不安定。富豪キープと1位確保を最優先。序盤から強カードで制圧してリードを奪い、枚数を早期に削る。';
+    else ph+='都落ちリスク高。最下位転落の危機。JKR・2・強ペアをフル活用し序盤から積極的に出す。場を流せる8があれば積極的に使う。';
     ph+='</div>';
-  }else if(pos==='貧民'){
-    const esc=Math.round((p1+p2)*10)/10;
-    ph+=`<div class="aitem"><span class="badge">脱出率（上位2位以内）</span><strong>${esc}%</strong>　`;
-    ph+=esc<35?'苦戦必至。革命が狙えるなら盤面破壊のワンチャンを。多枚数出しで勝負する。':'下克上の好機。相手が強カードを使い合う隙に、コンボで一気に駆け上がる。';
+  } else if(pos==='貧民'){
+    const avoid=Math.round((100-pLast)*10)/10;
+    ph+=`<div class="aitem"><span class="badge">最下位回避率</span><strong>${avoid}%</strong>　`;
+    if(avoid>=80) ph+='下克上の好機。手札が揃っている。富豪・平民が強カードを使い合う消耗戦に持ち込み、残り少なくなったところで一気に抜け出す。';
+    else if(avoid>=60) ph+='チャンスあり。相手の油断を突く展開を狙う。多枚数出しで早期に枚数を削り、終盤の逆転を狙うのが現実的。';
+    else if(avoid>=40) ph+='苦しい状況。革命狙いや8切りで場をリセットしながら少しずつ枚数を減らす。焦って弱いカードだけ切るのは避け、強カードを温存。';
+    else ph+='苦戦必至。革命が狙えるなら盤面破壊のワンチャンを活かす。多枚数出しで場を支配できる局面を粘り強く待つ。';
     ph+='</div>';
-  }else{
-    const sur=Math.round((p1+p2)*10)/10;
-    ph+=`<div class="aitem"><span class="badge">平民以上キープ率</span><strong>${sur}%</strong>　`;
-    ph+=sur<55?'転落リスクあり。2位確保を優先。ペアを確実に処理して最後まで生き残る。':'現状維持圏内。富豪同士を競わせ、疲弊した隙に安全に上がりを確定させる。';
+  } else if(pos==='平民0'){
+    ph+=`<div class="aitem"><span class="badge">1位率</span><strong>${p1}%</strong>　`;
+    if(p1>=50) ph+='初戦から優位に立てる強い手札。積極的に場をリードして富豪の座を確立する。';
+    else if(p1>=30) ph+='まずまずの出だし。初戦は全員フラットなので、ここで上位に入れば次ゲームが楽になる。確実に上位2位以内を狙う。';
+    else ph+='初戦は守りから入る。強カードを温存しつつ中位以上を確保する。次ゲームで役職に差がつくため、最下位だけは避ける。';
+    ph+=`</div>`;
+    const avoidFirst=Math.round((100-pLast)*10)/10;
+    ph+=`<div class="aitem"><span class="badge">最下位回避率</span><strong>${avoidFirst}%</strong>　`;
+    ph+=avoidFirst>=75?'最下位転落リスクは低い。安心して1位を狙いに行ける。':'最下位転落に注意。焦らず確実に中位以上を確保する立ち回りを優先。';
     ph+='</div>';
+  } else {
+    // 平民（2回目以降）
+    ph+=`<div class="aitem"><span class="badge">1位率</span><strong>${p1}%</strong>　`;
+    if(p1>=50) ph+='富豪昇格の好機。平民のポジションを活かし、富豪が都落ちを恐れて慎重になる隙を突いて差を広げる。';
+    else if(p1>=30) ph+='1位は十分狙える。富豪・貧民のカード交換で生じた手の偏りを読み、消耗した隙を突く。';
+    else ph+='1位は厳しい。強カードを持つ相手には無理せず、確実に中位を確保することを優先する。';
+    ph+='</div>';
+    const avoidMid=Math.round((100-pLast)*10)/10;
+    ph+=`<div class="aitem"><span class="badge">最下位回避率</span><strong>${avoidMid}%</strong>　`;
+    ph+=avoidMid>=75?'最下位転落リスクは低い。積極的に上を狙いに行ける局面。':'転落リスクあり。最下位回避を最優先。ペアを確実に処理して最後まで生き残る。';
+    ph+='</div>';
+    ph+=`<div class="aitem"><span class="badge">平民戦術</span>富豪・貧民はカード交換で強弱が固定。<strong>その差を利用して漁夫の利を狙う</strong>のが平民の定石。強カードを保持しているプレイヤーを見極めて、強い場面では控える。</div>`;
   }
   const pb=document.createElement('div'); pb.className='abox'; pb.style.animationDelay='0s';
   pb.innerHTML=ph; adv.appendChild(pb);
 
-  // 手札アドバイス
+  // ── 手札別の戦術ポイント ──
   const tips=[];
+  
+  // 革命関連（JKR補完も含む）
   if(rRev&&fours.length){
     const fn=fours.map(n=>D[n]).join('・');
-    tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${fn}の4枚組</strong>を保持。革命後は強弱逆転。残り手の数字を確認してから出すタイミングを見極める。`});
-    if(fours.length>=2) tips.push({b:'革命返し可',c:'y',t:'4枚組複数あり。<strong>相手の革命に対してより弱い数字の4枚組で返せる</strong>。どちらを温存するか決めておく。'});
+    if(fours.some(n=>n<=6)){
+      tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${fn}は低い数字</strong>での革命。革命後の強弱逆転で自分の残り手が一気に強くなる可能性大。相手の油断を突いて一気に出す。`});
+    } else {
+      tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${fn}の4枚組</strong>は革命に使えるが、そのまま出してもそこそこ強い。盤面の優劣を見て「革命か温存か」を選択する。`});
+    }
+    if(fours.length>=2) tips.push({b:'革命返し可',c:'y',t:'4枚組複数あり。<strong>相手の革命に対してより弱い数字の4枚組で返せる</strong>。どちらを温存するか事前に決めておく。革命返しは最強の反撃手段。'});
   }
-  if(joker) tips.push({b:`JKR×${joker}`,c:'g',t:'スペード3返しなしのため終盤まで最強。<strong>2や強カードへのカウンターに温存</strong>推奨。'});
-  if(has8) tips.push({b:'8切り',c:'',t:'相手の連打を断ち切れる。<strong>強手が続く場面で流したい時</strong>が使いどころ。'});
-  if(pairs>=4) tips.push({b:`ペア×${pairs}`,c:'',t:`ペアが豊富。<strong>ペア縛りの場を自分で作る</strong>と有利。2枚出しをリードする。`});
-  if(high===0) tips.push({b:'強カードなし',c:'r',t:'終盤の制圧カードがない。<strong>序盤から多枚数出しで枚数を削る</strong>戦術が有効。'});
-  if(!tips.length) tips.push({b:'バランス',c:'',t:'手札バランスが良い。<strong>状況に応じて強弱を使い分け</strong>ながら立ち回る。'});
+  // JKR補完革命（3枚組+JKRで革命）
+  if(rRev&&joker>0&&!fours.length){
+    const triRev=NUMS.filter(n=>n!==16&&(hand[n]||0)===3);
+    if(triRev.length){
+      const tn=triRev.map(n=>D[n]).join('・');
+      tips.push({b:`JKR革命候補 ${tn}`,c:'y',t:`<strong>${tn}の3枚+JKRで革命が狙える</strong>。JKRをワイルドとして補完することで4枚扱いになり革命成立。低い数字ほど革命後に有利になるので特に有効。シミュレーションではこの選択肢も評価済み。`});
+    }
+  }
+  
+  // ジョーカー（ワイルド活用含む）
+  if(joker===2){
+    const triJkr=NUMS.filter(n=>n!==16&&(hand[n]||0)===3);
+    if(rRev&&triJkr.length){
+      tips.push({b:'JKR×2 革命×2候補',c:'g',t:`JKR2枚保持かつ3枚組あり。<strong>2種の革命をJKR補完で狙える</strong>。また2枚をペア補完に分けて使うことも可能。局面に応じて「単体最強」「ペア補完」「革命」の3択を使い分ける。`});
+    } else {
+      tips.push({b:'JKR×2',c:'g',t:'<strong>最強カードを2枚保持</strong>。スペード3返しなしのため終盤まで絶対的切り札。相手の2やペアを後出しで制圧できる。ペア補完に1枚使っても1枚温存できる余裕がある。'});
+    }
+  } else if(joker===1){
+    // ペア補完できる数字があるか
+    const pairComp=NUMS.filter(n=>n!==16&&(hand[n]||0)===1&&n>=11); // 高い数字の単枚
+    if(pairComp.length){
+      const pc=pairComp.slice(-2).map(n=>D[n]).join('・');
+      tips.push({b:'JKR×1 ペア補完可',c:'g',t:`JKR1枚で<strong>${pc}などの単枚高カードをペアに格上げ</strong>できる。単体最強出しとペア補完、どちらが今の場面で得かを判断する。シミュレーションでは両方の選択肢を評価済み。`});
+    } else {
+      tips.push({b:'JKR×1',c:'g',t:'スペード3返しなしで最強。<strong>2や強カードへのカウンターに温存</strong>推奨。ペア補完にも使えるため、残り手の構成を見て最も効果的な使い方を選ぶ。'});
+    }
+  }
+  
+  // 2（最強通常カード）
+  if((hand[15]||0)>=2) tips.push({b:`2×${hand[15]}`,c:'g',t:`<strong>最強通常カードを${hand[15]}枚保持</strong>。場の制圧力が高い。序盤は温存し、相手が2で上がりを狙うタイミングに合わせてカウンターを。`});
+  else if(has2&&!joker) tips.push({b:'2×1',c:'g',t:'2枚は最強の通常カード。<strong>終盤の確実な上がりの保険</strong>として温存が基本。ただし手数が多い場合は中盤で使って流れを作ることも選択肢。'});
+  
+  // Aカード
+  if(hasA&&(hand[14]||0)>=2) tips.push({b:`A×${hand[14]}`,c:'',t:`Aが${hand[14]}枚。<strong>A複数枚は中終盤のペア・トリプル確保</strong>に強い。ペア縛りの場を作って一気に処理するとよい。`});
+  
+  // 8切り
+  if(has8){
+    if((hand[8]||0)>=2) tips.push({b:`8切り×${hand[8]}`,c:'',t:`8が${hand[8]}枚。<strong>複数の8切りは場のリセット権を複数持つ</strong>ということ。相手の連打を2度断ち切れる。強手が続く場面・上がりたい直前に使う。`});
+    else tips.push({b:'8切り',c:'',t:'相手の連打を断ち切れる場リセット札。<strong>強手が続く場面や自分が上がり直前</strong>で使うのが最も効果的。ただし上がり時に8を最後に使うことはできないので注意。'});
+  }
+  
+  // ペア
+  if(pairs>=5) tips.push({b:`ペア×${pairs}`,c:'',t:`ペアが豊富（${pairs}種）。<strong>ペア縛りの場を自分で作れる</strong>のが強み。積極的に2枚出しをリードし、相手のバラ牌を無力化する。`});
+  else if(pairs>=3) tips.push({b:`ペア×${pairs}`,c:'',t:`ペア${pairs}種あり。2枚出しの場では強い。<strong>状況に応じてペア縛りをリードし</strong>手数を減らす。`});
+  
+  // トリプル
+  if(triples.length) {
+    const tn=triples.map(n=>D[n]).join('・');
+    tips.push({b:`3枚組 ${tn}`,c:'',t:`<strong>${tn}の3枚組</strong>は3枚出しの場で圧倒的に強い。相手に同じ手がなければほぼ通る。3枚縛りの場を自分で作ることも検討。`});
+  }
+  
+  // 低カードのみ
+  if(lowOnly>=total*0.7&&total>=6){
+    tips.push({b:'低カード多め',c:'r',t:`手札の${Math.round(lowOnly/total*100)}%が3〜7。<strong>終盤の制圧力が低い</strong>ため、序盤から積極的に多枚数出しで枚数を削る。8切りや革命があれば積極活用。`});
+  }
+  
+  // 枚数が少ない
+  if(total<=5&&total>0) tips.push({b:`残り${total}枚`,c:'g',t:`<strong>枚数が少なく上がりに近い</strong>。各カードの使い順を慎重に計算。最後の1枚が何かを意識して、その手が通るタイミングを確実に見極める。`});
+  
+  // 強カードなし
+  if(high===0) tips.push({b:'強カードなし',c:'r',t:'A・2・JKRがゼロ。<strong>終盤の制圧カードがない</strong>ため、強カードを持つ相手に上がりを防がれやすい。序盤から多枚数出しで早期に枚数を削り、枚数勝負に持ち込む。'});
+  
+  // バランス手
+  if(!tips.length) tips.push({b:'バランス',c:'',t:'手札バランスが良い。<strong>状況に応じて強弱を使い分け</strong>ながら立ち回る。序盤はペア・多枚出しで枚数を削り、中盤以降は場の流れに合わせて強カードを投入する。'});
 
   let th=`<div class="atitle">手札別の戦術ポイント</div>`;
   for(const t of tips) th+=`<div class="aitem"><span class="badge ${t.c}">${t.b}</span>${t.t}</div>`;
   const tb=document.createElement('div'); tb.className='abox'; tb.style.animationDelay='.07s';
   tb.innerHTML=th; adv.appendChild(tb);
 
-  if(mode==='score'){
-    const hb=document.createElement('div'); hb.className='abox'; hb.style.animationDelay='.14s';
-    hb.innerHTML=`<div class="atitle">精度を上げたい場合</div>
-      <div class="aitem">スコアモードは即時計算ですが数式による近似です。より正確な確率が必要な場合は<strong>モンテカルロモード（500回以上推奨）</strong>に切り替えてください。</div>`;
-    adv.appendChild(hb);
-  }
+  // ── 確率の解釈ガイド ──
+  const kb=document.createElement('div'); kb.className='abox'; kb.style.animationDelay='.14s';
+  let kh=`<div class="atitle">確率の読み方</div>`;
+  if(p1>=60) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は優秀な手札を示す。ただしモンテカルロは<strong>AIの最適プレイに基づく理論値</strong>であり、実際の対人戦では心理・記憶・読み合いが加わる。過信せず、局面ごとの判断を大切に。</div>`;
+  else if(p1>=35) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は標準的な手札の強さ。大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
+  else kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は苦しい手。最下位確率が<strong>${pLast}%</strong>あることも念頭に置く。リスクを取って攻めるか、確実に中位を守るかの判断が問われる局面。</div>`;
+  kb.innerHTML=kh; adv.appendChild(kb);
 }
+
+// ── 戦術指南 ────────────────────────────────────────────
+function renderGamePlan(rates, np, hand, r8, rRev) {
+  const gp = document.getElementById('gameplan');
+  const empty = document.getElementById('gameplanEmpty');
+  gp.style.display = 'block';
+  empty.style.display = 'none';
+  gp.innerHTML = '';
+
+  // 手札情報を整理
+  const joker   = hand[16] || 0;
+  const has2    = (hand[15] || 0);
+  const hasA    = (hand[14] || 0);
+  const hasK    = (hand[13] || 0);
+  const hasQ    = (hand[12] || 0);
+  const fours   = [3,4,5,6,7,8,9,10,11,12,13,14,15].filter(n => (hand[n]||0) >= 4);
+  const triples = [3,4,5,6,7,8,9,10,11,12,13,14,15].filter(n => (hand[n]||0) === 3);
+  const pairs   = [3,4,5,6,7,8,9,10,11,12,13,14,15].filter(n => (hand[n]||0) === 2);
+  const singles = [3,4,5,6,7,8,9,10,11,12,13,14,15].filter(n => (hand[n]||0) === 1);
+  const total   = Object.values(hand).reduce((a,b) => a+b, 0);
+
+  // 革命候補
+  const revWith4  = rRev ? fours : [];
+  const revWith3j = rRev && joker > 0 ? triples : [];
+  const hasRevPlan = revWith4.length > 0 || revWith3j.length > 0;
+
+  // 低カード（捨て牌候補）：3〜8 のバラ
+  const lowSingles = singles.filter(n => n <= 8);
+  // 中カード（つなぎ）：9〜K
+  const midCards = [...singles.filter(n => n >= 9 && n <= 13),
+                    ...pairs.filter(n => n >= 9 && n <= 13)];
+  // 強カード
+  const strongCards = [];
+  if(has2)  strongCards.push(`2×${has2}`);
+  if(joker) strongCards.push(`JKR×${joker}`);
+
+  // 革命後に弱くなるカード（現在強い → 革命後弱い）
+  const preRevDump = hasRevPlan
+    ? [has2 && '2', hasA && 'A', hasK && 'K'].filter(Boolean)
+    : [];
+
+  // フェーズ別テキスト生成
+  const phases = [];
+
+  // ── 序盤 ──
+  const earlyLines = [];
+  if(lowSingles.length > 0) {
+    const names = lowSingles.map(n => D[n]).join('・');
+    earlyLines.push(`${names} のバラ牌から処理。場を作りながら手数を減らす。`);
+  }
+  if(pairs.filter(n => n <= 9).length > 0) {
+    const names = pairs.filter(n => n <= 9).map(n => D[n]).join('・');
+    earlyLines.push(`${names} のペアは序盤のペア縛りに使えるが、崩してバラ出しするのは避ける。`);
+  }
+  if(r8 && (hand[8]||0) > 0) {
+    earlyLines.push(`8切りは序盤に使わず、相手の連打が続く局面まで温存。`);
+  }
+  if(hasRevPlan && preRevDump.length > 0) {
+    earlyLines.push(`革命を見据えて <strong>${preRevDump.join('・')}</strong> を先に切っておく。革命後はこれらが弱くなる。`);
+  }
+  if(!earlyLines.length) earlyLines.push('捨て牌になる弱いバラ牌が少ない。場を作るカードを慎重に選ぶ。');
+  phases.push({ phase: '序盤', icon: '🃏', lines: earlyLines });
+
+  // ── 中盤 ──
+  const midLines = [];
+  if(triples.length > 0) {
+    const names = triples.map(n => D[n]).join('・');
+    midLines.push(`<strong>${names} のトリプル</strong>で3枚縛りを仕掛ける。相手が対応できなければそのまま押し切る。`);
+  }
+  if(pairs.filter(n => n >= 10).length >= 2) {
+    const names = pairs.filter(n => n >= 10).map(n => D[n]).join('・');
+    midLines.push(`<strong>${names} の高ペア</strong>はペア縛りの場で強力。自分からリードして場をペアに固定する。`);
+  }
+  if(hasRevPlan) {
+    const revTargets = [...revWith4.map(n => D[n]), ...revWith3j.map(n => D[n]+'（+JKR）')].join('・');
+    midLines.push(`<strong>${revTargets} で革命</strong>が狙える。革命後の残り手の強さを確認してから判断する。`);
+  }
+  if(singles.filter(n => n >= 11 && n <= 13).length > 0 && !hasRevPlan) {
+    const names = singles.filter(n => n >= 11 && n <= 13).map(n => D[n]).join('・');
+    midLines.push(`${names} の単枚高カードは相手の中カードへの返し札として中盤に温存。`);
+  }
+  if(!midLines.length) midLines.push('中盤は場の流れに合わせて柔軟に対応。強カードは終盤まで温存が基本。');
+  phases.push({ phase: '中盤', icon: '⚔️', lines: midLines });
+
+  // ── 終盤 ──
+  const lateLines = [];
+  if(has2 >= 2) {
+    lateLines.push(`<strong>2×${has2}</strong> は終盤の制圧札。相手の上がりを止めてから自分の残り手を処理する。`);
+  } else if(has2 === 1) {
+    lateLines.push(`<strong>2</strong> は最後の保険として残す。相手が上がりに来た局面でカウンター。`);
+  }
+  if(joker >= 2) {
+    lateLines.push(`<strong>JKR×${joker}</strong> は絶対的最強。終盤まで温存し、相手の2や強手に後出しで被せる。`);
+  } else if(joker === 1) {
+    lateLines.push(`<strong>JKR</strong> は温存。ただし${revWith3j.length > 0 ? '革命補完に使う選択肢もある。' : '終盤の逃げ切りに使う。'}`);
+  }
+  if(hasRevPlan) {
+    const lowRevCards = [...revWith4, ...revWith3j].filter(n => n <= 7).map(n => D[n]);
+    if(lowRevCards.length > 0) {
+      lateLines.push(`革命後は <strong>${lowRevCards.join('・')}</strong> が最強クラスになる。革命を決めた後は一気に押し切る。`);
+    }
+  }
+  const remainLow = singles.filter(n => n <= 6).length + pairs.filter(n => n <= 6).length;
+  if(remainLow > 0 && !hasRevPlan) {
+    lateLines.push(`低カードのバラ牌が残る可能性がある。終盤に出せなくなるリスクに注意。`);
+  }
+  if(!lateLines.length) lateLines.push('強カードを惜しまず使い切る。手数より確実な上がりを優先。');
+  phases.push({ phase: '終盤', icon: '🎯', lines: lateLines });
+
+  // ── 最優先事項（1行サマリ） ──
+  let priority = '';
+  const p1 = rates[1];
+  if(hasRevPlan && preRevDump.length > 0) {
+    priority = `革命前に <strong>${preRevDump.join('・')}</strong> を捌き、革命で一気に逆転を狙う。`;
+  } else if(p1 >= 55) {
+    priority = `手札は強い。強カードを温存しつつ中位手から丁寧に処理し、終盤で制圧する。`;
+  } else if(p1 >= 35) {
+    priority = `中程度の手。場の主導権を取れるタイミングを見極め、無駄な強カード消費を避ける。`;
+  } else if(triples.length > 0 || (pairs.length >= 4)) {
+    priority = `バラ牌は少ないが、コンボ（トリプル・ペア縛り）に特化した立ち回りで勝負。`;
+  } else {
+    priority = `難しい手。8切り・革命など場をリセットできる局面を粘り強く待つ。`;
+  }
+
+  // ── 描画 ──
+  // 最優先サマリ
+  const sumBox = document.createElement('div');
+  sumBox.className = 'abox';
+  sumBox.style.cssText = 'margin-bottom:10px;border-left:3px solid var(--acc);padding-left:14px';
+  sumBox.innerHTML = `<div class="atitle">この手札の最優先事項</div>
+    <div style="font-size:0.93rem;color:var(--txt);line-height:1.8">${priority}</div>`;
+  gp.appendChild(sumBox);
+
+  // フェーズ別
+  const phaseBox = document.createElement('div');
+  phaseBox.className = 'abox';
+  let ph = `<div class="atitle">フェーズ別の動き方</div>`;
+  for(const p of phases) {
+    ph += `<div class="aitem">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+        <span style="font-size:0.72rem;font-weight:700;background:var(--acc-lt);color:var(--acc-dk);border:1px solid var(--acc-md);border-radius:3px;padding:1px 8px;font-family:var(--mono)">${p.phase}</span>
+      </div>
+      <ul style="margin:0;padding-left:1.2em;font-size:0.87rem;color:var(--txt2);line-height:1.9">
+        ${p.lines.map(l => `<li>${l}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+  phaseBox.innerHTML = ph;
+  gp.appendChild(phaseBox);
+}
+
 </script>
 </body>
 </html>
