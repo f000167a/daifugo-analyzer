@@ -639,32 +639,76 @@ function simOnce(pH,np,r8,rRev){
     for(const c of un.slice(i*18,(i+1)*18))h[c]++;
     players.push(h);
   }
-  const active=Array.from({length:np},(_,i)=>i);
-  const rnk=[]; let field=null,rev=false,cur=0,cp=0,turn=0;
-  const sum=h=>NUMS.reduce((s,n)=>s+(h[n]||0),0);
-  while(active.length>1&&turn<2000){
+const active = Array.from({length:np}, (_,i)=>i);
+  const rnk = []; 
+  let field = null, rev = false, cur = 0, cp = 0, turn = 0;
+  let lastPlayer = 0; // ◀ 最後にカードを出したプレイヤーを記録
+
+  const sum = h => NUMS.reduce((s,n)=>s+(h[n]||0),0);
+
+  while(active.length > 1 && turn < 2000){
     turn++;
-    const pid=active[cur]; const h=players[pid];
-    const opp=active.filter(j=>j!==pid).map(j=>sum(players[j]));
-    const play=pick(h,field,rev,opp,rRev);
-    if(!play){ cp++; if(cp>=active.length-1&&field){field=null;cp=0;} cur=(cur+1)%active.length; continue; }
-    cp=0; const[n2,sz]=play; h[n2]-=sz; field=[n2,sz];
-    if(sz===4&&rRev)rev=!rev;
-    if(r8&&n2===8){ field=null;cp=0; if(sum(h)===0){rnk.push(pid);active.splice(active.indexOf(pid),1);if(active.length)cur=cur%active.length;} continue; }
-    if(sum(h)===0){ rnk.push(pid);active.splice(active.indexOf(pid),1);field=null;cp=0;if(active.length)cur=cur%active.length; continue; }
-    cur=(cur+1)%active.length;
+    const pid = active[cur]; 
+    const h = players[pid];
+    const opp = active.filter(j=>j!==pid).map(j=>sum(players[j]));
+    const play = pick(h, field, rev, opp, rRev);
+
+    if(!play){ 
+      cp++; 
+      // 自分以外の全員がパスして場が流れた場合
+      if(field && cp >= active.length - 1){
+        field = null;
+        cp = 0;
+        // 次の親は、最後にカードを出したプレイヤー
+        if(active.includes(lastPlayer)){
+          cur = active.indexOf(lastPlayer);
+        } else {
+          // もし最後にカードを出した人がすでに上がって抜けている場合、
+          // 一般的なルールでは「上がった人の次のプレイヤー」が親
+          cur = cur % active.length; 
+        }
+        continue; 
+      }
+      cur = (cur + 1) % active.length; 
+      continue; 
+    }
+
+    // ── カードをプレイする場合 ──
+    cp = 0; 
+    const [n2, sz] = play; 
+    h[n2] -= sz; 
+    field = [n2, sz];
+    lastPlayer = pid; // ◀ カードを出したプレイヤーを更新
+
+    if(sz === 4 && rRev) rev = !rev;
+
+    // 8切り処理
+    if(r8 && n2 === 8){ 
+      field = null; 
+      cp = 0; 
+      if(sum(h) === 0){
+        rnk.push(pid);
+        active.splice(active.indexOf(pid), 1);
+        if(active.length) cur = cur % active.length; // 上がり時の次プレイヤー
+      }
+      // 上がっていない場合は cur をそのまま維持（自分が次の親）
+      continue; 
+    }
+
+    // 通常の上がり処理
+    if(sum(h) === 0){ 
+      rnk.push(pid);
+      active.splice(active.indexOf(pid), 1);
+      // 本来は場が流れないが、簡易シミュレーションの仕様に合わせる場合でも
+      // インデックスの整合性を取るために調整が必要
+      if(active.length) cur = cur % active.length; 
+      continue; 
+    }
+
+    cur = (cur + 1) % active.length;
   }
-  for(const p of active)if(!rnk.includes(p))rnk.push(p);
+  for(const p of active) if(!rnk.includes(p)) rnk.push(p);
   return rnk;
-}
-function mc(hand,np,r8,rRev,trials){
-  const cnt=Object.fromEntries(Array.from({length:np},(_,i)=>[i+1,0]));
-  for(let i=0;i<trials;i++){
-    const r=simOnce(hand,np,r8,rRev);
-    const rank=r.includes(0)?r.indexOf(0)+1:np;
-    cnt[rank]++;
-  }
-  return Object.fromEntries(Object.entries(cnt).map(([k,v])=>[+k,Math.round(v/trials*1000)/10]));
 }
 
 // ── 実行 ─────────────────────────────────────────────
