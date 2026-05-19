@@ -591,12 +591,12 @@ function scoreMode(hand,np,r8,rRev){
   return rates;
 }
 
-// ── モンテカルロ ──────────────────────────────────────
+// ── モンテカルロ（バグ修正＆都落ち・非同期分割版） ───────────────────
 function shuf(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a; }
 function cpOk(n,sz,f,rev){ if(!f)return true; return sz===f[1]&&rk(n,rev)>rk(f[0],rev); }
 function avgRevRk(hand,used,nr){
   const v=[];
-  for(const n of NUMS){ const c=hand[n]||0; if(!c||n===used)continue; for(let i=0; i<c; i++)v.push(rk(n,nr)); }
+  for(const n of NUMS){ const c=hand[n]||0; if(!c||n===used)continue; for(let i=0;i<c;i++)v.push(rk(n,nr)); }
   return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;
 }
 function pick(hand,field,rev,opp,rRev){
@@ -611,7 +611,7 @@ function pick(hand,field,rev,opp,rRev){
       if(cnt===sz)sc+=35; sc+=sz*12;
       if(tot<=4)sc+=nr*45+20;
       else if(danger)sc+=nr*55;
-      else if(!field)sc-=nr*30; // 親番のときは弱いカードから出したいヘリスティック
+      else if(!field)sc-=nr*30;
       else{
         const rd=rk(num,rev)-rk(field[0],rev);
         if(rd===1)sc+=25; else if(rd===2)sc+=18; else if(rd===3)sc+=12; else if(rd>=8)sc-=20;
@@ -640,32 +640,27 @@ function simOnce(pH,np,r8,rRev,myPos){
     for(const c of un.slice(i*18,(i+1)*18))h[c]++;
     players.push(h);
   }
-
   const active=Array.from({length:np},(_,i)=>i);
   const rnk=[]; let field=null,rev=false,cp=0,turn=0;
-
-  // 【バグ修正①】親（初期手番）の確率計算を適正化
-  // 自分（0）固定にせず、初戦なら完全ランダム、2戦目以降なら他家（大富豪など）から始まる確率を再現
-  let cur = myPos === '平民（初戦）' ? Math.floor(Math.random()*np) : Math.floor(Math.random()*np);
+  
+  // 【バグ修正】親番（初期手番）を分散（自分固定を廃止）
+  let cur = Math.floor(Math.random() * np);
 
   const sum=h=>NUMS.reduce((s,n)=>s+(h[n]||0),0);
-
   while(active.length>1&&turn<1000){
     turn++;
     const pid=active[cur]; const h=players[pid];
     const opp=active.filter(j=>j!==pid).map(j=>sum(players[j]));
     const play=pick(h,field,rev,opp,rRev);
-
     if(!play){ 
       cp++; 
       if(cp>=active.length-1&&field){field=null;cp=0;} 
       cur=(cur+1)%active.length; 
       continue; 
     }
-
     cp=0; const[n2,sz]=play; h[n2]-=sz; field=[n2,sz];
     if(sz===4&&rRev)rev=!rev;
-
+    
     // 8切り処理
     if(r8&&n2===8){ 
       field=null; cp=0; 
@@ -673,35 +668,95 @@ function simOnce(pH,np,r8,rRev,myPos){
         rnk.push(pid);
         active.splice(active.indexOf(pid),1);
       }
-      if(active.length) cur=cur%active.length; 
+      if(active.length) cur = cur % active.length;
       continue; 
     }
-
-    // 【バグ修正②】通常上がり時の安全なリセット（無限ループ・泥沼化を完全回避）
+    
+    // 【バグ修正】上がり時のインデックス整合性確保（無限ループを完全防止）
     if(sum(h)===0){ 
       rnk.push(pid);
       active.splice(active.indexOf(pid),1);
-      field=null; cp=0; // 場をリセットして次のプレイヤーへ
-      if(active.length) cur=cur%active.length; 
+      field=null; cp=0; 
+      if(active.length) cur = cur % active.length;
       continue; 
     }
     cur=(cur+1)%active.length;
   }
   for(const p of active) if(!rnk.includes(p)) rnk.push(p);
 
-  // 【ロジック修正③】「都落ち」ルールのシミュレーション補正
-  // 2戦目以降で、自分（富豪/貧民）以外のプレイヤー（例えばpid=1を仮の大富豪とする）が1位を逃した場合、強制的に最下位にする
-  if(myPos !== '平民（初戦）' && rnk[0] !== 0 && Math.random() < 0.5) {
-    // 簡易的に「前ターンの大富豪だった他家」が1位を取れなかった世界線を再現
-    const loser = rnk[0];
-    rnk.splice(0, 1);
-    rnk.push(loser); // 最下位に転落
+  // 【ロジック修正】「都落ちルール」の順位判定補正（富豪は場に1人のルール）
+  if(myPos === '富豪') {
+    // 自分が富豪で、1位（rnk[0]）が自分（0）でなければ強制的に最下位に転落
+    if(rnk[0] !== 0) {
+      const myIdx = rnk.indexOf(0);
+      if(myIdx !== -1) {
+        rnk.splice(myIdx, 1);
+        rnk.push(0); // 最下位（3人なら3位、5人なら5位）へ
+      }
+    }
+  } else if(myPos !== '平民') { 
+    // 自分が平民（初戦）以外のとき、他家のうち1人（仮にID:1）が「前ゲームの富豪」となる
+    // その富豪(1)が1位を逃した場合、都落ちさせて最下位に落とす（他家の順位が繰り上がる）
+    if(rnk[0] !== 1) {
+      const fIdx = rnk.indexOf(1);
+      if(fIdx !== -1) {
+        rnk.splice(fIdx, 1);
+        rnk.push(1);
+      }
+    }
   }
 
   return rnk;
 }
 
-// ── 実行（非同期チャンク処理でフリーズを完全解決） ───────────────────
+// ── スコアモード（役職・都落ちの簡易数式補正を追加） ──────────────────
+function scoreMode(hand,np,r8,rRev,myPos){
+  function ns(n){ return n===16?1.0:NR[n]/12; }
+  let sc=0; const fours=[]; let joker=hand[16]||0, pairs=0;
+  for(const n of NUMS){
+    const c=hand[n]||0; if(!c) continue;
+    const s=ns(n); sc+=s*c*3.0;
+    if(c>=2){ pairs++; sc+=0.25; }
+    if(c>=3) sc+=0.55;
+    if(c>=4&&rRev){
+      fours.push(n);
+      const postRevB=(1-ns(n))*1.2;
+      const rem=Object.fromEntries(NUMS.map(k=>[k,k===n?0:hand[k]||0]));
+      const remTot=NUMS.reduce((s,k)=>s+(rem[k]||0),0)||1;
+      const postAvg=NUMS.reduce((s,k)=>{
+        const rc=rem[k]; if(!rc) return s;
+        return s+(k===16?1.0:(12-NR[k])/12)*rc;
+      },0)/remTot;
+      sc += 0.8+postRevB+postAvg*0.6;
+    }
+  }
+  if(joker>0) sc+=joker*1.5;
+  if((hand[8]||0)>0&&r8) sc+=0.35;
+  const tot=NUMS.reduce((s,n)=>s+HC[n],0);
+  const rat=tot/18;
+  if(rat<0.8)sc*=0.82; else if(rat<0.95)sc*=0.93; else if(rat>1.2)sc*=0.92;
+  
+  // 親番が回ってこないリスク等を考慮したベース勝率
+  const baseW = Math.min(.85,Math.max(.05,Math.tanh((sc/9.5-.9)*2.2)*.42+.38));
+  let rates={};
+  
+  if(np===3){ rates[1]=baseW; rates[2]=Math.min(.95,(1-(1-baseW)**2)*.8+baseW*.1); rates[3]=Math.max(.02,(1-baseW)**2*.7); }
+  else if(np===4){ rates[1]=baseW; rates[2]=Math.min(.92,(1-(1-baseW)**3)*.55); rates[3]=Math.min(.90,1-baseW-rates[2]*.5); rates[4]=Math.max(.01,(1-baseW)**3*.55); }
+  else{ rates[1]=baseW; rates[2]=Math.min(.88,(1-(1-baseW)**4)*.45); rates[3]=Math.min(.80,1-baseW-rates[2]*.3); rates[4]=Math.min(.45,(1-baseW)**3*.4); rates[5]=Math.max(.01,(1-baseW)**4*.35); }
+  
+  // スコアモードにおける都落ち補正
+  if(myPos === '富豪') {
+    const nonFirst = 1 - rates[1];
+    for(let r=2; r<np; r++) rates[r] = 0;
+    rates[np] = nonFirst; // 1位以外はすべて最下位へ
+  }
+  
+  const sum=Object.values(rates).reduce((a,b)=>a+b,0);
+  for(const k in rates) rates[k]=Math.round(rates[k]/sum*1000)/10;
+  return rates;
+}
+
+// ── 実行（非同期分割処理にアップデート） ───────────────────────────
 function run(){
   const tot=NUMS.reduce((s,n)=>s+HC[n],0);
   if(!tot){ alert('手札を入力してください'); return; }
@@ -725,7 +780,7 @@ function run(){
     let done = 0;
     const cnt = Object.fromEntries(Array.from({length:np}, (_,i)=>[i+1,0]));
 
-    // 20回ずつ小分けにして実行することでUIスレッドのフリーズを防止
+    // 1フレームあたり25回ずつに分割して実行（UIをフリーズさせない）
     function doChunk(){
       const chunkSize = 25;
       for(let i=0; i<chunkSize && done<trials; i++){
@@ -738,9 +793,8 @@ function run(){
       bar.style.width = (done / trials * 100) + '%';
 
       if(done < trials){
-        setTimeout(doChunk, 0); // 次のチャンクを非同期で実行
+        setTimeout(doChunk, 0);
       } else {
-        // 全試行が完了した後の処理
         const rates = Object.fromEntries(Object.entries(cnt).map(([k,v])=>[+k,Math.round(v/trials*1000)/10]));
         setTimeout(()=>{ bar.style.width='0'; },600);
         btn.disabled=false; spin.style.display='none';
@@ -750,8 +804,7 @@ function run(){
     }
     doChunk();
   } else {
-    // スコアモード（即時計算）
-    const rates = scoreMode(hand,np,r8,rRev);
+    const rates = scoreMode(hand,np,r8,rRev,myPos);
     bar.style.width='100%';
     setTimeout(()=>{ bar.style.width='0'; },600);
     btn.disabled=false; spin.style.display='none';
@@ -759,6 +812,7 @@ function run(){
     render(rates,np,r8,rRev,hand);
   }
 }
+   
 // ── 描画 ─────────────────────────────────────────────
 function render(rates,np,r8,rRev,hand){
   const names=RNAMES[np];
