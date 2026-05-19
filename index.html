@@ -599,76 +599,117 @@ function avgRevRk(hand,used,nr){
 // JKRは「num×(sz-jokerUsed) + JKR×jokerUsed」として出す
 function pick(hand,field,rev,opp,rRev){
   const tot=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
-  const danger=opp.length&&Math.min(...opp)<=2;
+  const oppMin=opp.length?Math.min(...opp):99;
+  const danger=oppMin<=3;
+  const urgency=oppMin<=5;
   const mx=NUMS.length-1; const cands=[];
   const joker=hand[16]||0;
 
+  // ── 革命先読み評価 ──────────────────────────────────
+  // 革命候補（4枚組 or 3枚組+JKR）があるか
+  const revCands4  = rRev ? NUMS.filter(n=>n!==16&&(hand[n]||0)>=4) : [];
+  const revCands3j = rRev&&joker>0 ? NUMS.filter(n=>n!==16&&(hand[n]||0)===3) : [];
+  const hasRevPlan = revCands4.length>0 || revCands3j.length>0;
+
+  // 革命後の残り手の強さ期待値（革命に使うnum×(4-jUsed)+JKR×jUsedを除いた手）
+  function evalPostRevHand(excludeNum, useJoker){
+    let s=0,c=0;
+    for(const n of NUMS){
+      let cnt=hand[n]||0;
+      if(n===excludeNum) cnt=Math.max(0,cnt-(4-useJoker));
+      if(n===16)         cnt=Math.max(0,cnt-useJoker);
+      if(!cnt) continue;
+      s+=rk(n,!rev)/mx*cnt; c+=cnt;
+    }
+    return c>0?s/c:0;
+  }
+
+  // 革命後に弱くなるカードを今のうちに切る価値（場なし優先）
+  function preRevDumpBonus(num){
+    if(!hasRevPlan) return 0;
+    const diff = rk(num,rev)/mx - rk(num,!rev)/mx; // 革命後に弱くなる度合い
+    return diff>0 ? diff*35 : 0;
+  }
+  // ────────────────────────────────────────────────────
+
   for(const num of NUMS){
-    if(num===16) continue; // JKR単体はあとで処理
+    if(num===16) continue;
     const cnt=hand[num]||0;
-    // jokerUsed: 0〜min(joker,不足分) を試みる
-    // szは field があれば field[1] に固定、なければ 1〜cnt+joker
     const maxSz = field ? field[1] : cnt+joker;
     const minSz = field ? field[1] : 1;
     for(let sz=minSz; sz<=Math.min(maxSz, cnt+joker); sz++){
-      // この sz を出すのに必要な jokerUsed
-      const need = Math.max(0, sz-cnt);
+      const need=Math.max(0,sz-cnt);
       if(need>joker) continue;
-      const jUsed=need; // 最小限のJKRだけ使う
+      const jUsed=need;
       if(!cpOk(num,sz,field,rev)) continue;
 
       const r=rk(num,rev); const nr=r/mx; let sc=0;
-      const effCnt=cnt+jUsed; // 実質このsz枚を出せる
-      if(cnt===sz&&jUsed===0) sc+=35; // 手牌を使い切る
-      else if(cnt+jUsed===sz&&cnt+jUsed===cnt+joker) sc+=20; // JKR含めて使い切り
-      sc+=sz*12;
-      if(tot<=4) sc+=nr*45+20;
-      else if(danger) sc+=nr*55;
-      else if(!field) sc-=nr*30;
-      else{
+
+      // 【基本】枚数を使い切るボーナス
+      if(cnt===sz&&jUsed===0) sc+=40;
+      else if(cnt+joker===sz) sc+=25;
+      sc+=sz*10;
+
+      if(field===null){
+        if(tot<=5||danger){
+          sc+=nr*40+15;
+        } else {
+          sc+=(1-nr)*8;
+          if(nr>0.85) sc-=15;
+          // 【革命先読み】革命後に弱くなるカードを場なしで優先して切る
+          sc+=preRevDumpBonus(num);
+        }
+      } else {
         const rd=rk(num,rev)-rk(field[0],rev);
-        if(rd===1)sc+=25; else if(rd===2)sc+=18; else if(rd===3)sc+=12; else if(rd>=8)sc-=20;
-        sc-=nr*18;
+        if(rd===1) sc+=30;
+        else if(rd===2) sc+=22;
+        else if(rd===3) sc+=15;
+        else if(rd>=7) sc-=15;
+        if(danger||urgency) sc+=nr*50;
+        else {
+          sc-=nr*12;
+          // 【革命先読み】場ありでも革命後弱くなるカードはやや優先
+          sc+=preRevDumpBonus(num)*0.6;
+        }
       }
-      // 革命（sz===4）スコア加算
+
+      // 【革命：4枚出し or 3枚+JKR】
       if(sz===4&&rRev){
-        const pn=avgRevRk(hand,num,!rev)/mx; sc+=20+pn*35; if(danger)sc+=25;
-        // JKR使い革命は若干スコア下げ（温存価値があるため）
-        if(jUsed>0) sc-=10;
+        const useJ=jUsed;
+        const postStr=evalPostRevHand(num,useJ);
+        // 革命後の残り手が強いほど革命価値が高い
+        sc+=30+postStr*65;
+        if(danger) sc+=35;
+        if(useJ>0) sc-=8;
       }
-      // ペアやトリプルをバラで出すのをペナルティ
-      if(cnt>=2&&sz===1&&cnt<=3&&jUsed===0) sc-=25;
-      if(cnt===3&&sz===2&&jUsed===0) sc-=15;
-      if(cnt===4&&sz>=1&&sz<=3&&jUsed===0) sc-=18;
-      // JKRをペア補完に使う：単体より弱いカードのペアはあまりお得でない
-      if(jUsed>0&&sz<=2&&nr<0.6) sc-=15;
+
+      // 【ペア・トリプルを崩すペナルティ】
+      if(cnt>=2&&sz===1&&cnt<=3&&jUsed===0) sc-=30;
+      if(cnt===3&&sz===2&&jUsed===0) sc-=12;
+      if(cnt===4&&sz>=1&&sz<=3&&jUsed===0) sc-=20;
+      if(jUsed>0&&sz<=2&&nr<0.55) sc-=12;
 
       cands.push([sc,num,sz,jUsed]);
     }
   }
 
-  // JKR単体出し（場がある場合のみ：最強なので必ず通る）
-  if(joker>0 && field){
-    // JKR単体は sz=field[1] でないと場に出せない
-    // ただし大富豪ルールではJKRは何枚出しにも使えるが、単体1枚扱いが一般的
-    // ここでは「JKR単体1枚=最強1枚出し」として扱う
-    if(field[1]===1){
-      const r=rk(16,rev); const nr=r/mx; let sc=0;
-      sc+=nr*60; // 最強なので高スコア
-      if(tot<=3) sc+=40;
-      else if(danger) sc+=50;
-      else sc-=30; // 温存価値があるので通常は使わない方向
-      cands.push([sc,16,1,0]); // num=16, sz=1, jUsed=0（JKR自体を出す）
-    }
-  } else if(joker>0 && !field){
-    // 場なし：JKR単体で場を開けるのは勿体ないのでスコア低め
-    const r=rk(16,rev); const nr=r/mx;
-    if(tot<=2) cands.push([nr*50+30, 16, 1, 0]); // 残り少なければあり
+  // JKR単体出し
+  if(joker>0&&field&&field[1]===1){
+    const nr=rk(16,rev)/mx; let sc=0;
+    sc+=nr*55;
+    if(tot<=3) sc+=50;
+    else if(danger) sc+=60;
+    else sc-=20;
+    // 革命補完に使う予定があれば温存
+    if(hasRevPlan&&revCands3j.length>0) sc-=25;
+    cands.push([sc,16,1,0]);
+  } else if(joker>0&&!field&&tot<=2){
+    cands.push([rk(16,rev)/mx*50+40,16,1,0]);
   }
 
   if(!cands.length) return null;
   cands.sort((a,b)=>b[0]-a[0]);
-  return [cands[0][1], cands[0][2], cands[0][3]]; // [num, sz, jokerUsed]
+  return [cands[0][1],cands[0][2],cands[0][3]];
 }
 
 function simOnce(pH,np,r8,rRev,myPos){
