@@ -346,6 +346,21 @@ def evaluate(W, n_games=400, np_=3, r8=True, r_rev=True):
 
     return total_rank / n_games
 
+# ── 並列評価 ──────────────────────────────────────────────────
+def _eval_worker(args):
+    """multiprocessing用ワーカー（トップレベル関数である必要がある）"""
+    W_list, n_games, np_, r8, r_rev = args
+    W = np.array(W_list)
+    return evaluate(W, n_games, np_, r8, r_rev)
+
+def evaluate_parallel(W_candidates, n_games, np_, r8, r_rev, n_workers):
+    """pop個の候補を並列評価して報酬リストを返す"""
+    from multiprocessing import Pool
+    args = [(W.tolist(), n_games, np_, r8, r_rev) for W in W_candidates]
+    with Pool(processes=n_workers) as pool:
+        rewards = pool.map(_eval_worker, args)
+    return np.array(rewards)
+
 # ── OpenAI-ES（進化戦略） ─────────────────────────────────────
 def train(
     n_iter    = 200,    # 世代数
@@ -357,24 +372,28 @@ def train(
     r8        = True,
     r_rev     = True,
     sigma_decay = 0.995,
+    n_workers = None,   # 並列数（Noneで自動=CPUコア数）
 ):
+    import os
+    if n_workers is None:
+        n_workers = os.cpu_count() or 1
+
     W    = W_INIT.copy()
     best_score = evaluate(W, eval_games, np_, r8, r_rev)
     best_W     = W.copy()
 
     print(f"初期スコア（平均着順）: {best_score:.4f}")
-    print(f"係数次元数: {len(W)}, 世代数: {n_iter}, pop: {pop_size}\n")
+    print(f"係数次元数: {len(W)}, 世代数: {n_iter}, pop: {pop_size}, workers: {n_workers}\n")
 
     for gen in range(n_iter):
-        noise   = np.random.randn(pop_size, len(W))
-        rewards = np.zeros(pop_size)
+        noise = np.random.randn(pop_size, len(W))
+        W_candidates = [np.clip(W + sigma * noise[i], 0.5, 120.0) for i in range(pop_size)]
 
-        for i in range(pop_size):
-            W_try = np.clip(W + sigma * noise[i], 0.5, 120.0)  # 係数が負・発散しないよう制限
-            rewards[i] = evaluate(W_try, eval_games, np_, r8, r_rev)
+        # pop個の候補を並列評価
+        rewards = evaluate_parallel(W_candidates, eval_games, np_, r8, r_rev, n_workers)
 
         # 正規化（低着順=良い → 符号反転して最大化問題に変換）
-        r_neg = -rewards  # 着順を反転（高いほど良い）
+        r_neg  = -rewards
         r_norm = (r_neg - r_neg.mean()) / (r_neg.std() + 1e-8)
 
         # 勾配推定・更新
