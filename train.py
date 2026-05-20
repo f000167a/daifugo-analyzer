@@ -355,7 +355,8 @@ def _eval_worker(args):
 
 def evaluate_parallel(W_candidates, n_games, np_, r8, r_rev, n_workers):
     """pop個の候補を並列評価して報酬リストを返す"""
-    from multiprocessing import Pool
+    from multiprocessing import Pool, freeze_support
+    freeze_support()  # Windows exe化対応（通常実行でも無害）
     args = [(W.tolist(), n_games, np_, r8, r_rev) for W in W_candidates]
     with Pool(processes=n_workers) as pool:
         rewards = pool.map(_eval_worker, args)
@@ -685,6 +686,8 @@ def _pearson_corr(x, y):
 # ── エントリポイント ──────────────────────────────────────────
 if __name__ == "__main__":
     import sys, os
+    from multiprocessing import freeze_support
+    freeze_support()  # Windows必須
 
     # 引数で設定変更可能
     # 例: python train.py --iter 300 --pop 30 --games 600
