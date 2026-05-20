@@ -889,7 +889,7 @@ function pick(hand,field,rev,opp,rRev){
 
 // ── MCTS手選択 ────────────────────────────────────────
 // 自分(pid=0)の手番で合法手ごとにN回ロールアウトし、期待着順最小の手を返す
-const MCTS_ROLLOUTS = 8; // 1手あたりのロールアウト数
+const MCTS_ROLLOUTS = 30; // 1手あたりのロールアウト数
 
 function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn){
   // 現在の局面から全員がpick()でプレイした場合の自分の着順を返す
@@ -1252,7 +1252,7 @@ function _revScore(hand, revNum, jUsed, joker, two, ace){
 // ── 実行 ───────────────────────────────────────────────
 // MCTSモード時は試行数を減らす（1試行あたり手番数xROLLOUT倍のコスト）
 const TRIALS_NORMAL = 2000;
-const TRIALS_MCTS   = 300;
+const TRIALS_MCTS   = 150;
 function run(){
   const tot=NUMS.reduce((s,n)=>s+HC[n],0);
   if(!tot){ alert('手札を入力してください'); return; }
