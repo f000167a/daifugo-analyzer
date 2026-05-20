@@ -432,6 +432,74 @@ input[type=range]::-webkit-slider-thumb {
     </div>
   </div>
 
+  <!-- 学習結果 -->
+  <div style="margin-top:32px;padding-top:24px;border-top:2px solid var(--bdr)">
+    <div class="st" style="margin-bottom:10px">学習係数管理</div>
+    <div class="card">
+
+      <!-- 現在の係数ステータス -->
+      <div id="wStatus" style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--bdr)">
+        <span style="font-size:0.82rem;color:var(--txt2)">現在のAI係数:</span>
+        <span id="wStatusBadge" style="font-size:0.78rem;font-weight:700;font-family:var(--mono);padding:2px 10px;border-radius:3px;background:var(--bg2);border:1px solid var(--bdr);color:var(--txt2)">デフォルト</span>
+        <button onclick="resetW()" style="margin-left:auto;font-size:0.78rem;padding:4px 10px;border-radius:4px;border:1px solid var(--bdr2);background:var(--white);color:var(--txt2);cursor:pointer">リセット</button>
+      </div>
+
+      <!-- results.jsonl 読み込み -->
+      <div style="margin-bottom:14px">
+        <div class="fl">results.jsonl を選択</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <label style="display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:5px;border:1px solid var(--bdr2);background:var(--white);cursor:pointer;font-size:0.87rem;color:var(--txt2)">
+            📂 ファイルを選択
+            <input type="file" id="jsonlFile" accept=".jsonl,.json" style="display:none" onchange="loadJsonl(this)">
+          </label>
+          <span id="jsonlName" style="font-size:0.82rem;color:var(--txt3)">未選択</span>
+        </div>
+      </div>
+
+      <!-- 履歴テーブル -->
+      <div id="historyWrap" style="display:none">
+        <div class="fl" style="margin-bottom:8px">実行履歴 <span id="historyCount" style="font-weight:400;color:var(--txt3)"></span></div>
+        <div style="overflow-x:auto">
+          <table id="historyTable" style="width:100%;border-collapse:collapse;font-size:0.82rem">
+            <thead>
+              <tr style="border-bottom:2px solid var(--bdr)">
+                <th style="text-align:left;padding:5px 8px;color:var(--txt2);font-weight:600">日時</th>
+                <th style="text-align:right;padding:5px 8px;color:var(--txt2);font-weight:600">平均着順</th>
+                <th style="text-align:center;padding:5px 8px;color:var(--txt2);font-weight:600">iter</th>
+                <th style="text-align:center;padding:5px 8px;color:var(--txt2);font-weight:600">pop</th>
+                <th style="text-align:center;padding:5px 8px;color:var(--txt2);font-weight:600">games</th>
+                <th style="text-align:center;padding:5px 8px;color:var(--txt2);font-weight:600">操作</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+
+        <!-- 係数差分プレビュー -->
+        <div id="diffWrap" style="display:none;margin-top:16px">
+          <div class="fl" style="margin-bottom:8px">係数差分プレビュー <span id="diffTitle" style="font-weight:400;color:var(--txt3)"></span></div>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:0.80rem">
+              <thead>
+                <tr style="border-bottom:1px solid var(--bdr)">
+                  <th style="text-align:left;padding:4px 8px;color:var(--txt2)">係数</th>
+                  <th style="text-align:right;padding:4px 8px;color:var(--txt2)">デフォルト</th>
+                  <th style="text-align:right;padding:4px 8px;color:var(--txt2)">最適値</th>
+                  <th style="text-align:right;padding:4px 8px;color:var(--txt2)">変化</th>
+                </tr>
+              </thead>
+              <tbody id="diffBody"></tbody>
+            </table>
+          </div>
+          <button id="applyBtn" onclick="applyW()" style="margin-top:12px;padding:8px 20px;border-radius:5px;border:none;background:var(--acc);color:#fff;font-size:0.87rem;font-weight:700;cursor:pointer;font-family:var(--font)">
+            この係数をAIに反映する
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -519,6 +587,39 @@ function updateHandHint(){
     hint.innerHTML = `強さ順（通常時）: 3 &lt; 4 &lt; 5 &lt; 6 &lt; 7 &lt; 8 &lt; 9 &lt; 10 &lt; J &lt; Q &lt; K &lt; A &lt; 2 &lt; <b>JKR</b>　／　手札 <b>${chosen}枚</b>（${np}人時は${base}か${base+1}枚）　JKR最大2枚、その他最大4枚`;
   }
 }
+// ── pick()係数ベクトル（train.pyと同順） ──────────────────────
+// W[0]〜W[17]: 各スコア係数。train.pyの最適化結果をここに反映する。
+const W_DEFAULT = [
+  12,  // 0  sz_bonus
+  35,  // 1  block_bonus
+  20,  // 2  eff_delta_w
+  15,  // 3  abs_eff_w
+  35,  // 4  loose_penalty
+  35,  // 5  late_nr_w
+  10,  // 6  late_bonus
+  18,  // 7  normal_weak_w
+  20,  // 8  normal_high_pen
+  10,  // 9  combo_low_w
+   3,  // 10 combo_high_w
+   8,  // 11 mid_nr_w
+  28,  // 12 rd1_bonus
+  20,  // 13 rd2_bonus
+  12,  // 14 rd3_bonus
+  18,  // 15 rd_large_pen
+  45,  // 16 danger_nr_w
+   8,  // 17 normal_nr_pen
+];
+let W = [...W_DEFAULT]; // mutableなコピー（学習結果で上書き可能）
+
+const W_LABELS = [
+  'sz_bonus','block_bonus','eff_delta_w','abs_eff_w',
+  'loose_penalty','late_nr_w','late_bonus',
+  'normal_weak_w','normal_high_pen',
+  'combo_low_w','combo_high_w','mid_nr_w',
+  'rd1_bonus','rd2_bonus','rd3_bonus',
+  'rd_large_pen','danger_nr_w','normal_nr_pen',
+];
+
 // バーの色（JSONデータカラー準拠）
 const BCOL = {1:'#AC3E00',2:'#FB5B01',3:'#CCCCCC',4:'#C0392B',5:'#C0392B'};
 const BCLS = {1:'r1',2:'r2',3:'r3',4:'rl',5:'rl'};
@@ -695,17 +796,17 @@ function pick(hand,field,rev,opp,rRev){
       const r=rk(num,rev); const nr=r/mx; let sc=0;
 
       // ── ① 枚数消化ボーナス（手番1回あたり多く捌けるほど高評価）──
-      sc += sz * 12;
+      sc += sz * W[0];
       // そのカードを丸ごと出し切る（ブロック消去）ボーナス
-      if(cnt===sz&&jUsed===0) sc += 35;
+      if(cnt===sz&&jUsed===0) sc += W[1];
 
       // ── ② 出した後の手番効率スコア ──
       const afterEff = effAfterPlay(hand, num, sz, jUsed);
       // 効率が上がる（または維持）なら加点、下がるなら減点
       const effDelta = afterEff - curEff;
-      sc += effDelta * 20;
+      sc += effDelta * W[2];
       // 絶対効率が高いほど良い（2枚/手番より3枚/手番の残り手の方が優秀）
-      sc += afterEff * 15;
+      sc += afterEff * W[3];
 
       // ── ③ バラ牌ペナルティ（残り手のバラ比率が増えると損） ──
       const after={};
@@ -715,29 +816,29 @@ function pick(hand,field,rev,opp,rRev){
       const afterLoose = looseRatio(after);
       // バラ牌が増える出し方は強くペナルティ
       const looseDelta = afterLoose - curLoose;
-      sc -= looseDelta * 35;
+      sc -= looseDelta * W[4];
 
       // ── ④ 場なし / 場あり 別スコア ──
       if(field===null){
         if(tot<=5||danger){
-          sc += nr*35+10;
+          sc += nr*W[5]+W[6];
         } else {
           // 弱いカードから出す基本方針
-          sc += (1-nr)*18;
-          if(nr>0.77) sc -= 20;
+          sc += (1-nr)*W[7];
+          if(nr>0.77) sc -= W[8];
           // ペア・トリプルは手番効率が高いので積極的に
-          if(sz>=2 && nr<0.65) sc += sz*10;
-          if(sz>=2 && nr>=0.65) sc += sz*3;
-          if(tot<=10) sc += nr*8;
+          if(sz>=2 && nr<0.65) sc += sz*W[9];
+          if(sz>=2 && nr>=0.65) sc += sz*W[10];
+          if(tot<=10) sc += nr*W[11];
         }
       } else {
         const rd=rk(num,rev)-rk(field[0],rev);
-        if(rd===1) sc+=28;
-        else if(rd===2) sc+=20;
-        else if(rd===3) sc+=12;
-        else if(rd>=8) sc-=18;
-        if(danger||urgency) sc+=nr*45;
-        else sc-=nr*8;
+        if(rd===1) sc+=W[12];
+        else if(rd===2) sc+=W[13];
+        else if(rd===3) sc+=W[14];
+        else if(rd>=8) sc-=W[15];
+        if(danger||urgency) sc+=nr*W[16];
+        else sc-=nr*W[17];
       }
 
       // ── ⑤ 革命スコア ──
@@ -1564,6 +1665,115 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   }
   phaseBox.innerHTML = ph;
   gp.appendChild(phaseBox);
+}
+
+// ── 学習結果UI ────────────────────────────────────────────────
+let _jsonlRecords = [];   // 読み込んだ全レコード
+let _pendingW     = null; // 反映待ちのW_opt
+
+function loadJsonl(input){
+  const file = input.files[0];
+  if(!file) return;
+  document.getElementById('jsonlName').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.trim().split('\n');
+    _jsonlRecords = [];
+    for(const line of lines){
+      try { _jsonlRecords.push(JSON.parse(line)); } catch(e){}
+    }
+    // best_score昇順でソート（良い順）
+    _jsonlRecords.sort((a,b) => a.best_score - b.best_score);
+    renderHistory(_jsonlRecords);
+  };
+  reader.readAsText(file);
+}
+
+function renderHistory(records){
+  const wrap  = document.getElementById('historyWrap');
+  const tbody = document.getElementById('historyBody');
+  const count = document.getElementById('historyCount');
+  wrap.style.display  = 'block';
+  count.textContent   = `（${records.length}件）`;
+  tbody.innerHTML     = '';
+
+  const best = records[0]?.best_score ?? Infinity;
+
+  records.forEach((r, i) => {
+    const isBest = r.best_score === best;
+    const tr = document.createElement('tr');
+    tr.style.cssText = 'border-bottom:1px solid var(--bg2);cursor:pointer';
+    tr.onmouseenter = () => tr.style.background = 'var(--bg)';
+    tr.onmouseleave = () => tr.style.background = '';
+    tr.innerHTML = `
+      <td style="padding:6px 8px;font-family:var(--mono);font-size:0.78rem;color:var(--txt2)">
+        ${r.timestamp}${r.interrupted ? ' <span style="color:var(--txt3)">[中断]</span>' : ''}
+      </td>
+      <td style="padding:6px 8px;text-align:right;font-family:var(--mono);font-weight:700;color:${isBest?'var(--green)':'var(--txt)'}">
+        ${r.best_score.toFixed(4)}${isBest ? ' ★' : ''}
+      </td>
+      <td style="padding:6px 8px;text-align:center;color:var(--txt2)">${r.config?.iter ?? '-'}</td>
+      <td style="padding:6px 8px;text-align:center;color:var(--txt2)">${r.config?.pop  ?? '-'}</td>
+      <td style="padding:6px 8px;text-align:center;color:var(--txt2)">${r.config?.games ?? '-'}</td>
+      <td style="padding:6px 8px;text-align:center">
+        <button onclick="showDiff(${i})" style="font-size:0.75rem;padding:3px 10px;border-radius:3px;border:1px solid var(--bdr2);background:var(--white);color:var(--txt2);cursor:pointer">詳細</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function showDiff(idx){
+  const r      = _jsonlRecords[idx];
+  const W_opt  = r.W_opt;
+  const diffW  = document.getElementById('diffWrap');
+  const tbody  = document.getElementById('diffBody');
+  const title  = document.getElementById('diffTitle');
+  diffW.style.display = 'block';
+  title.textContent   = `（${r.timestamp}  avg_rank: ${r.best_score.toFixed(4)}）`;
+  tbody.innerHTML     = '';
+  _pendingW = W_opt;
+
+  W_LABELS.forEach((lbl, i) => {
+    const def  = W_DEFAULT[i];
+    const opt  = W_opt[i];
+    const diff = opt - def;
+    const absDiff = Math.abs(diff);
+    const col  = diff > 0 ? 'var(--green)' : diff < 0 ? 'var(--red)' : 'var(--txt3)';
+    const mark = absDiff >= 3 ? ' ◀' : '';
+    const tr   = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--bg2)';
+    tr.innerHTML = `
+      <td style="padding:4px 8px;font-family:var(--mono);color:var(--txt2)">${lbl}</td>
+      <td style="padding:4px 8px;text-align:right;font-family:var(--mono);color:var(--txt3)">${def.toFixed(1)}</td>
+      <td style="padding:4px 8px;text-align:right;font-family:var(--mono);font-weight:${absDiff>=3?'700':'400'};color:var(--txt)">${opt.toFixed(1)}</td>
+      <td style="padding:4px 8px;text-align:right;font-family:var(--mono);color:${col}">${diff>=0?'+':''}${diff.toFixed(2)}${mark}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  diffW.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function applyW(){
+  if(!_pendingW) return;
+  W = [..._pendingW];
+  const badge = document.getElementById('wStatusBadge');
+  badge.textContent = '学習済み係数';
+  badge.style.cssText = 'font-size:0.78rem;font-weight:700;font-family:var(--mono);padding:2px 10px;border-radius:3px;background:#E8F5E9;border:1px solid #81C784;color:#1B5E20';
+  document.getElementById('applyBtn').textContent = '✓ 反映済み';
+  document.getElementById('applyBtn').style.background = 'var(--green)';
+}
+
+function resetW(){
+  W = [...W_DEFAULT];
+  const badge = document.getElementById('wStatusBadge');
+  badge.textContent = 'デフォルト';
+  badge.style.cssText = 'font-size:0.78rem;font-weight:700;font-family:var(--mono);padding:2px 10px;border-radius:3px;background:var(--bg2);border:1px solid var(--bdr);color:var(--txt2)';
+  if(document.getElementById('applyBtn')){
+    document.getElementById('applyBtn').textContent = 'この係数をAIに反映する';
+    document.getElementById('applyBtn').style.background = 'var(--acc)';
+  }
 }
 
 </script>
