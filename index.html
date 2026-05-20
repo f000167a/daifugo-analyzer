@@ -444,6 +444,27 @@ input[type=range]::-webkit-slider-thumb {
         <button onclick="resetW()" style="margin-left:auto;font-size:0.78rem;padding:4px 10px;border-radius:4px;border:1px solid var(--bdr2);background:var(--white);color:var(--txt2);cursor:pointer">リセット</button>
       </div>
 
+      <!-- シミュレーションログ出力 -->
+      <div style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--bdr)">
+        <div class="fl" style="margin-bottom:8px">シミュレーションログ</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span id="simLogCount" style="font-size:0.82rem;color:var(--txt3)">0件蓄積</span>
+          <button id="simLogExportBtn" onclick="exportSimLog()" disabled
+            style="font-size:0.82rem;padding:6px 14px;border-radius:4px;border:1px solid var(--bdr2);background:var(--white);color:var(--txt2);cursor:pointer;opacity:0.4">
+            📥 sim_log.json をダウンロード
+          </button>
+          <button onclick="clearSimLog()"
+            style="font-size:0.78rem;padding:4px 10px;border-radius:4px;border:1px solid var(--bdr2);background:var(--white);color:var(--txt3);cursor:pointer">
+            クリア
+          </button>
+        </div>
+        <div style="font-size:0.75rem;color:var(--txt3);margin-top:6px">
+          分析するたびに結果が蓄積されます。ダウンロードして
+          <code style="background:var(--bg2);padding:1px 5px;border-radius:3px">python train.py --sim-log sim_log.json</code>
+          で手札評価係数を補正できます。
+        </div>
+      </div>
+
       <!-- results.jsonl 読み込み -->
       <div style="margin-bottom:14px">
         <div class="fl">results.jsonl を選択</div>
@@ -623,6 +644,32 @@ const W_LABELS = [
 // バーの色（JSONデータカラー準拠）
 const BCOL = {1:'#AC3E00',2:'#FB5B01',3:'#CCCCCC',4:'#C0392B',5:'#C0392B'};
 const BCLS = {1:'r1',2:'r2',3:'r3',4:'rl',5:'rl'};
+
+// ── シミュレーション結果蓄積 ──────────────────────────────────
+// 分析するたびに {features, rates, evalScore} を蓄積してJSONで出力できる
+const SIM_LOG = [];
+
+function handToFeatures(hand){
+  // evaluateHand()の評価軸に対応した特徴量ベクトル（train.py側と共通化）
+  const total  = NUMS.reduce((s,n)=>s+(hand[n]||0),0);
+  const joker  = hand[16]||0;
+  const two    = hand[15]||0;
+  const ace    = hand[14]||0;
+  const fours4 = NUMS.filter(n=>n!==16&&(hand[n]||0)>=4).length;
+  const fours3j= NUMS.filter(n=>n!==16&&(hand[n]||0)===3).length;
+  const pairs  = NUMS.filter(n=>n!==16&&(hand[n]||0)>=2).length;
+  const triples= NUMS.filter(n=>n!==16&&(hand[n]||0)>=3).length;
+  const weakIso= NUMS.filter(n=>n!==16&&n<11&&n!==8&&(hand[n]||0)===1).length;
+  const eights = hand[8]||0;
+  const highCards = (hand[11]||0)+(hand[12]||0)+(hand[13]||0); // J+Q+K
+  return {
+    total, joker, two, ace,
+    fours4, fours3j, pairs, triples,
+    weakIso, eights, highCards,
+    // 手札構成の生データも保持（train.py側での再計算用）
+    hand: Object.fromEntries(NUMS.map(n=>[n, hand[n]||0]))
+  };
+}
 
 function rk(n,rev){ return n===16 ? NUMS.length-1 : (rev?RR:NR)[n]; }
 
@@ -1293,6 +1340,18 @@ function run(){
     btn.disabled=false; spin.style.display='none';
     document.getElementById('runL').textContent='分析する';
     const evalResult = evaluateHand(hand, r8, rRev);
+
+    // ── シミュレーション結果をログに追記 ──
+    SIM_LOG.push({
+      timestamp : new Date().toISOString(),
+      config    : { np, r8, rRev, useMCTS, trials: TRIALS },
+      features  : handToFeatures(hand),
+      rates,          // {1: 40.7, 2: 35.0, 3: 24.3}
+      evalScore : evalResult.score,
+      evalRaw   : evalResult.raw,
+    });
+    updateSimLogUI();
+
     render(rates,np,r8,rRev,hand,evalResult,useMCTS,TRIALS);
   }
   doChunk();
@@ -1671,6 +1730,36 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   }
   phaseBox.innerHTML = ph;
   gp.appendChild(phaseBox);
+}
+
+// ── シミュレーションログUI ────────────────────────────────────
+function updateSimLogUI(){
+  const count = SIM_LOG.length;
+  const el    = document.getElementById('simLogCount');
+  const btn   = document.getElementById('simLogExportBtn');
+  if(!el) return;
+  el.textContent = `${count}件蓄積`;
+  el.style.color = count > 0 ? 'var(--acc-dk)' : 'var(--txt3)';
+  btn.disabled   = count === 0;
+  btn.style.opacity = count > 0 ? '1' : '0.4';
+}
+
+function exportSimLog(){
+  if(!SIM_LOG.length) return;
+  const json = JSON.stringify(SIM_LOG, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `sim_log_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function clearSimLog(){
+  if(!SIM_LOG.length) return;
+  if(!confirm(`${SIM_LOG.length}件のログをクリアしますか？`)) return;
+  SIM_LOG.length = 0;
+  updateSimLogUI();
 }
 
 // ── 学習結果UI ────────────────────────────────────────────────
