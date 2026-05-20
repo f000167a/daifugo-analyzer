@@ -366,6 +366,10 @@ input[type=range]::-webkit-slider-thumb {
             <input type="checkbox" checked disabled><span class="cbox"></span>ジョーカー 2枚
             <span class="chk-note">固定</span>
           </label>
+          <label class="chk" style="margin-top:4px;padding-top:8px;border-top:1px solid var(--bdr)">
+            <input type="checkbox" id="rMCTS"><span class="cbox"></span>MCTS強化モード
+            <span class="chk-note" style="color:var(--acc-dk)">精度↑ 低速</span>
+          </label>
         </div>
       </div>
     </div>
@@ -782,7 +786,148 @@ function pick(hand,field,rev,opp,rRev){
   return [cands[0][1],cands[0][2],cands[0][3]];
 }
 
-function simOnce(pH,np,r8,rRev,myPos){
+// ── MCTS手選択 ────────────────────────────────────────
+// 自分(pid=0)の手番で合法手ごとにN回ロールアウトし、期待着順最小の手を返す
+const MCTS_ROLLOUTS = 8; // 1手あたりのロールアウト数
+
+function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn){
+  // 現在の局面から全員がpick()でプレイした場合の自分の着順を返す
+  const plCopy = players.map(h=>({...h}));
+  const active = [...activeIn];
+  let fld = field ? [...field] : null;
+  let rv = rev, cpass = cp, turn = 0;
+  const rnk = [];
+  let cur = activeIn.indexOf(myIdx);
+  if(cur < 0) return np; // すでに上がっている
+
+  const sum = h => NUMS.reduce((s,n)=>s+(h[n]||0),0);
+  while(active.length > 1 && turn < 800){
+    turn++;
+    const pid = active[cur];
+    const h = plCopy[pid];
+    const opp = active.filter(j=>j!==pid).map(j=>sum(plCopy[j]));
+    const play = pick(h, fld, rv, opp, rRev);
+    if(!play){
+      cpass++;
+      if(cpass >= active.length-1 && fld){ fld=null; cpass=0; }
+      cur = (cur+1) % active.length;
+      continue;
+    }
+    cpass = 0;
+    const [n2,sz,jUsed] = play;
+    if(n2===16){ h[16]-=sz; }
+    else{ h[n2]-=sz-jUsed; h[16]-=(jUsed||0); }
+    fld = [n2,sz];
+    if(sz===4&&rRev) rv=!rv;
+    if(r8&&n2===8){
+      fld=null; cpass=0;
+      if(sum(h)===0){ rnk.push(pid); active.splice(active.indexOf(pid),1); }
+      if(active.length) cur=Math.floor(Math.random()*active.length);
+      continue;
+    }
+    if(sum(h)===0){
+      rnk.push(pid);
+      active.splice(active.indexOf(pid),1);
+      fld=null; cpass=0;
+      if(active.length) cur=Math.floor(Math.random()*active.length);
+      continue;
+    }
+    cur = (cur+1) % active.length;
+  }
+  for(const p of active) if(!rnk.includes(p)) rnk.push(p);
+  return rnk.indexOf(myIdx) + 1;
+}
+
+function mctsPick(hand, field, rev, opp, rRev, r8, np, players, myIdx, cp, activeIn){
+  // 合法手を列挙（pick()内部のcands生成ロジックを流用）
+  const mx = NUMS.length-1;
+  const joker = hand[16]||0;
+  const tot = NUMS.reduce((s,n)=>s+(hand[n]||0),0);
+  const lateGame = tot<=6, ultraLate = tot<=3;
+  const curEff = handEfficiency(hand);
+  const curLoose = looseRatio(hand);
+
+  const candMoves = []; // {num, sz, jUsed}
+
+  for(const num of NUMS){
+    if(num===16) continue;
+    const cnt = hand[num]||0; if(!cnt) continue;
+    if(field){
+      const sz=field[1], need=Math.max(0,sz-cnt);
+      if(need<=joker && cpOk(num,sz,field,rev)) candMoves.push({num,sz,jUsed:need});
+    } else {
+      for(let sz=1;sz<=cnt;sz++) candMoves.push({num,sz,jUsed:0});
+      if(rRev&&cnt>=2&&cnt<=3&&joker>=(4-cnt)) candMoves.push({num,sz:4,jUsed:4-cnt});
+    }
+  }
+  // JKR単体出し
+  if(joker>0&&field&&field[1]===1) candMoves.push({num:16,sz:1,jUsed:0});
+  else if(joker>0&&!field&&ultraLate&&tot<=2) candMoves.push({num:16,sz:1,jUsed:0});
+
+  // パスも候補に（場がある場合のみ）
+  if(field) candMoves.push(null);
+
+  if(candMoves.length === 0) return null;
+  // 合法手が1つ（またはパスのみ）はpick()に委譲
+  const realMoves = candMoves.filter(m=>m!==null);
+  if(realMoves.length <= 1) return pick(hand, field, rev, opp, rRev);
+
+  // 各合法手をロールアウトで評価
+  const scores = new Map(); // key: JSON → {totalRank, count}
+  for(const move of candMoves){
+    const key = move ? `${move.num},${move.sz},${move.jUsed}` : 'pass';
+    let totalRank = 0;
+    for(let i=0; i<MCTS_ROLLOUTS; i++){
+      // moveを実行した後の状態を作る
+      const plCopy = players.map(h=>({...h}));
+      const myH = plCopy[myIdx];
+      let fld = field ? [...field] : null;
+      let rv = rev, cpass = cp;
+      const activeIn2 = [...activeIn];
+
+      if(move === null){
+        // パス
+        cpass++;
+        if(cpass >= activeIn2.length-1 && fld){ fld=null; cpass=0; }
+      } else {
+        const {num,sz,jUsed} = move;
+        if(num===16){ myH[16]-=sz; }
+        else{ myH[num]-=sz-jUsed; myH[16]-=(jUsed||0); }
+        fld=[num,sz];
+        if(sz===4&&rRev) rv=!rv;
+        // 8切り処理
+        if(r8&&num===8){ fld=null; cpass=0; }
+        // 上がり処理
+        const sum = h=>NUMS.reduce((s,n)=>s+(h[n]||0),0);
+        if(sum(myH)===0){
+          totalRank += 1; // 即上がりは最高
+          continue;
+        }
+      }
+      // ロールアウト（次手番から）
+      const nextCur = (activeIn2.indexOf(myIdx)+1) % activeIn2.length;
+      const rank = mctsRollout(plCopy, myIdx, np, r8, rRev, fld, rv, cpass, activeIn2);
+      totalRank += rank;
+    }
+    scores.set(key, {move, totalRank, avg: totalRank/MCTS_ROLLOUTS});
+  }
+
+  // 期待着順が最小の手を選択（パスは参考のみ、出せる手があれば優先）
+  let best = null, bestAvg = Infinity;
+  for(const [key, v] of scores){
+    if(v.move === null) continue; // パスは後で判断
+    if(v.avg < bestAvg){ bestAvg=v.avg; best=v.move; }
+  }
+  // パスの期待着順と比較
+  const passEntry = scores.get('pass');
+  if(passEntry && passEntry.avg < bestAvg - 0.3){ // パスがかなり有利なら見送り
+    return null;
+  }
+  if(!best) return null;
+  return [best.num, best.sz, best.jUsed];
+}
+
+function simOnce(pH,np,r8,rRev,myPos,useMCTS){
   const full=[]; for(let n=3;n<=15;n++)for(let i=0;i<4;i++)full.push(n); full.push(16,16);
   const un=[...full];
   for(const n of NUMS){ const c=pH[n]||0; for(let i=0;i<c;i++){const idx=un.indexOf(n);if(idx!==-1)un.splice(idx,1);} }
@@ -807,7 +952,10 @@ function simOnce(pH,np,r8,rRev,myPos){
     turn++;
     const pid=active[cur]; const h=players[pid];
     const opp=active.filter(j=>j!==pid).map(j=>sum(players[j]));
-    const play=pick(h,field,rev,opp,rRev);
+    // pid===0（自分）かつMCTSモード有効時のみmctsPickを使用
+    const play = (useMCTS && pid===0)
+      ? mctsPick(h, field, rev, opp, rRev, r8, np, players, pid, cp, [...active])
+      : pick(h, field, rev, opp, rRev);
     if(!play){ 
       cp++; 
       if(cp>=active.length-1&&field){field=null;cp=0;} 
@@ -856,8 +1004,154 @@ function simOnce(pH,np,r8,rRev,myPos){
 }
 
 
+// ── ルールベース手札評価 ────────────────────────────────
+// 返り値: { score: 0-100, raw: number, breakdown: [{label,val,note}] }
+function evaluateHand(hand, r8, rRev) {
+  const MX = NUMS.length - 1; // 13
+  let s = 0;
+  const bd = [];
+
+  const total  = NUMS.reduce((sum,n) => sum + (hand[n]||0), 0);
+  const joker  = hand[16] || 0;
+  const two    = hand[15] || 0;
+  const ace    = hand[14] || 0;
+
+  // ── 枚数ペナルティ（多いほど手番がかかる） ──
+  const cardPen = Math.max(0, (total - 13) * 3);
+  s -= cardPen;
+  if(cardPen) bd.push({label:'枚数過多', val:-cardPen, note:`${total}枚（13超過分 ×3）`});
+
+  // ── 強カード評価 ──
+  const fours3j = rRev ? NUMS.filter(n => n!==16 && (hand[n]||0)===3) : []; // JKR補完革命候補
+  const fours4  = rRev ? NUMS.filter(n => n!==16 && (hand[n]||0)>=4) : [];  // 4枚革命候補
+
+  // JKR
+  if(joker > 0){
+    let jv = joker * 15;
+    // 革命補完候補（3枚組）があれば追加価値
+    if(rRev && fours3j.length > 0) jv += fours3j.length * 10;
+    // バラ牌をペアに補完できる
+    const weakSingles = NUMS.filter(n => n!==16 && (hand[n]||0)===1 && n<14);
+    if(weakSingles.length > 0) jv += 5;
+    if(joker === 2) jv += 10; // 2枚持ちボーナス
+    s += jv;
+    bd.push({label:`JKR×${joker}`, val:jv, note:'最強 + 補完価値'});
+  }
+
+  // 2
+  if(two > 0){
+    const tv = two * 12;
+    s += tv;
+    bd.push({label:`2×${two}`, val:tv, note:'実質最強クラス'});
+  }
+
+  // A
+  if(ace > 0){
+    const av = ace * 6;
+    s += av;
+    bd.push({label:`A×${ace}`, val:av, note:'高ランク'});
+  }
+
+  // ── 革命評価（あり設定時のみ） ──
+  if(rRev){
+    // 4枚組による革命
+    for(const r of fours4){
+      const revScore = _revScore(hand, r, 0, joker, two, ace);
+      s += revScore.net;
+      bd.push({label:`革命(${D[r]}×4)`, val:revScore.net,
+               note:`革命後強度${(revScore.postStr*100).toFixed(0)}% 前捌きリスク-${revScore.waste}`});
+    }
+    // JKR補完革命（3枚組+JKR1枚）
+    if(joker >= 1){
+      for(const r of fours3j){
+        const revScore = _revScore(hand, r, 1, joker, two, ace);
+        s += revScore.net;
+        bd.push({label:`革命補完(${D[r]}+JKR)`, val:revScore.net,
+                 note:`革命後強度${(revScore.postStr*100).toFixed(0)}% 前捌きリスク-${revScore.waste}`});
+      }
+    }
+  }
+
+  // ── ペア・トリプルのコンボ評価 ──
+  const pairs   = NUMS.filter(n => n!==16 && (hand[n]||0)>=2).length;
+  const triples = NUMS.filter(n => n!==16 && (hand[n]||0)>=3).length;
+  const comboV  = pairs * 4 + triples * 5;
+  if(comboV > 0){
+    s += comboV;
+    bd.push({label:`コンボ(P:${pairs} T:${triples})`, val:comboV, note:'ペア×4 トリプル×5'});
+  }
+
+  // ── 孤立弱カードペナルティ（J未満の単枚、革命候補除く） ──
+  const revNums = new Set([...fours4, ...(joker>=1?fours3j:[])]);
+  const weakIso = NUMS.filter(n =>
+    n !== 16 && n < 11 && n !== 8 &&
+    (hand[n]||0) === 1 && !revNums.has(n)
+  ).length;
+  if(weakIso > 0){
+    const ip = weakIso * 4;
+    s -= ip;
+    bd.push({label:'弱バラ牌', val:-ip, note:`J未満の単枚×${weakIso}（8除く）`});
+  }
+
+  // ── 8切り保有 ──
+  if(r8 && (hand[8]||0) > 0){
+    const ev = (hand[8]||0) * 5;
+    s += ev;
+    bd.push({label:`8切り×${hand[8]}`, val:ev, note:'場リセット権'});
+  }
+
+  // ── 強カードゼロペナルティ ──
+  if(joker === 0 && two === 0 && ace === 0){
+    s -= 10;
+    bd.push({label:'強カードなし', val:-10, note:'A/2/JKRゼロ'});
+  }
+
+  // 0-100正規化（経験的な範囲 -30〜+100 を想定）
+  const score = Math.max(0, Math.min(100, Math.round((s + 30) * 100 / 130)));
+  return { score, raw: s, breakdown: bd };
+}
+
+// 革命スコア計算サブ関数
+// revNum: 革命に使うランク, jUsed: JKR消費数
+function _revScore(hand, revNum, jUsed, joker, two, ace){
+  const MX = NUMS.length - 1;
+
+  // ── 革命後の残り手の強さ（0〜1）──
+  // 革命後はランクが逆転。残り手を革命後ランクで評価。
+  let pScore = 0, pCount = 0;
+  for(const n of NUMS){
+    let cnt = hand[n] || 0;
+    if(n === revNum) cnt = Math.max(0, cnt - (4 - jUsed)); // 使った枚数分除外
+    if(n === 16)     cnt = Math.max(0, cnt - jUsed);
+    if(!cnt) continue;
+    pScore += rk(n, true) / MX * cnt; // 革命後ランク(rev=true)
+    pCount += cnt;
+  }
+  const postStr = pCount > 0 ? pScore / pCount : 0;
+
+  // ── 革命前に消化しきれない強カードの損失推定 ──
+  // A(14)と2(15)は革命後に弱くなる。JKRは常に最強なので除外。
+  const strongPreRev = two + ace;
+  // 革命候補以外のカードをペア平均で消化すると仮定し、革命までの手数を推定
+  const otherCards = NUMS.filter(n => n !== revNum && n !== 16)
+                         .reduce((s,n) => s + (hand[n]||0), 0);
+  const turnsBeforeRev = Math.floor(otherCards / 2);
+  const waste = Math.max(0, strongPreRev - turnsBeforeRev);
+
+  // ── スコア統合 ──
+  const mult = 0.5 + postStr;       // 0.5〜1.5倍（革命後の手が強いほど高倍率）
+  const base = jUsed === 0 ? 20 : 14; // JKR補完は価値が若干低い
+  const gross = Math.round(base * mult);
+  const penalty = waste * 8;
+  const net = gross - penalty;
+
+  return { net, postStr, waste };
+}
+
 // ── 実行 ───────────────────────────────────────────────
-const TRIALS = 2000;
+// MCTSモード時は試行数を減らす（1試行あたり手番数xROLLOUT倍のコスト）
+const TRIALS_NORMAL = 2000;
+const TRIALS_MCTS   = 300;
 function run(){
   const tot=NUMS.reduce((s,n)=>s+HC[n],0);
   if(!tot){ alert('手札を入力してください'); return; }
@@ -865,6 +1159,8 @@ function run(){
   const r8=document.getElementById('r8').checked;
   const rRev=document.getElementById('rRev').checked;
   const myPos=document.getElementById('myPos').value;
+  const useMCTS=document.getElementById('rMCTS').checked;
+  const TRIALS = useMCTS ? TRIALS_MCTS : TRIALS_NORMAL;
   const btn=document.getElementById('runBtn');
   const spin=document.getElementById('spin');
 
@@ -877,10 +1173,10 @@ function run(){
 
   let done=0;
   const cnt=Object.fromEntries(Array.from({length:np},(_,i)=>[i+1,0]));
+  const chunkSize = useMCTS ? 5 : 50;
   function doChunk(){
-    const chunkSize=50;
     for(let i=0;i<chunkSize&&done<TRIALS;i++){
-      cnt[simOnce(hand,np,r8,rRev,myPos)]++;
+      cnt[simOnce(hand,np,r8,rRev,myPos,useMCTS)]++;
       done++;
     }
     bar.style.width=(done/TRIALS*100)+'%';
@@ -889,15 +1185,17 @@ function run(){
     setTimeout(()=>{ bar.style.width='0'; },600);
     btn.disabled=false; spin.style.display='none';
     document.getElementById('runL').textContent='分析する';
-    render(rates,np,r8,rRev,hand);
+    const evalResult = evaluateHand(hand, r8, rRev);
+    render(rates,np,r8,rRev,hand,evalResult,useMCTS,TRIALS);
   }
   doChunk();
 }
    
 // ── 描画 ─────────────────────────────────────────────
-function render(rates,np,r8,rRev,hand){
+function render(rates,np,r8,rRev,hand,evalResult,useMCTS,trials){
   const names=RNAMES[np];
-  document.getElementById('modeChip').textContent = `モンテカルロ ${TRIALS}試行`;
+  document.getElementById('modeChip').textContent =
+    useMCTS ? `MCTS強化 ${trials}試行 (rollout×${MCTS_ROLLOUTS})` : `モンテカルロ ${trials}試行`;
 
   // rank boxes
   const rb=document.getElementById('rboxes'); rb.innerHTML='';
@@ -921,14 +1219,53 @@ function render(rates,np,r8,rRev,hand){
   }
   setTimeout(()=>document.querySelectorAll('.bfill[data-w]').forEach(el=>{ el.style.width=el.dataset.w+'%'; }),80);
 
-  renderAdv(rates,np,hand,r8,rRev);
+  renderAdv(rates,np,hand,r8,rRev,evalResult);
   renderGamePlan(rates,np,hand,r8,rRev);
   const el=document.getElementById('result'); el.style.display='block';
   el.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-function renderAdv(rates,np,hand,r8,rRev){
+function renderAdv(rates,np,hand,r8,rRev,evalResult){
   const adv=document.getElementById('adv'); adv.innerHTML='';
+
+  // ── ルールベース手札評価スコア表示 ──
+  if(evalResult){
+    const sc = evalResult.score;
+    // スコアに応じた色
+    const scColor = sc >= 70 ? 'var(--green)' : sc >= 45 ? 'var(--acc)' : 'var(--red)';
+    const scLabel = sc >= 70 ? '強い手' : sc >= 45 ? '標準的な手' : '弱い手';
+    const evalBox = document.createElement('div');
+    evalBox.className = 'abox';
+    evalBox.style.animationDelay = '0s';
+
+    // 内訳をプラス/マイナスで色分け
+    const bdRows = evalResult.breakdown.map(b => {
+      const col = b.val >= 0 ? 'var(--green)' : 'var(--red)';
+      const sign = b.val >= 0 ? '+' : '';
+      return `<tr>
+        <td style="color:var(--txt2);font-size:0.82rem;padding:2px 0">${b.label}</td>
+        <td style="font-family:var(--mono);font-weight:700;color:${col};text-align:right;padding:2px 0 2px 12px">${sign}${b.val}</td>
+        <td style="color:var(--txt3);font-size:0.76rem;padding:2px 0 2px 10px">${b.note}</td>
+      </tr>`;
+    }).join('');
+
+    evalBox.innerHTML = `
+      <div class="atitle">手札評価スコア（ルールベース）</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">
+        <div style="font-size:2.2rem;font-weight:700;font-family:var(--mono);color:${scColor};line-height:1">${sc}</div>
+        <div>
+          <div style="font-size:0.87rem;font-weight:700;color:${scColor}">${scLabel}</div>
+          <div style="font-size:0.76rem;color:var(--txt2)">raw: ${evalResult.raw}</div>
+        </div>
+        <div style="flex:1;background:var(--bg2);border-radius:4px;height:8px;border:1px solid var(--bdr);overflow:hidden">
+          <div style="height:100%;width:${sc}%;background:${scColor};transition:width .6s ease;border-radius:4px"></div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">${bdRows}</table>
+      <div style="font-size:0.72rem;color:var(--txt3);margin-top:8px">※ モンテカルロとは独立した静的評価。シミュレーション結果と合わせて参照。</div>
+    `;
+    adv.appendChild(evalBox);
+  }
   const pos=document.getElementById('myPos').value;
   const fours=NUMS.filter(n=>n!==16&&(hand[n]||0)>=4);
   const triples=NUMS.filter(n=>n!==16&&(hand[n]||0)===3);
