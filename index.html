@@ -1127,14 +1127,17 @@ function evaluateHand(hand, r8, rRev) {
   const fours4  = rRev ? NUMS.filter(n => n!==16 && (hand[n]||0)>=4) : [];  // 4枚革命候補
 
   // JKR
+  // 補完価値は「最も価値が高い使い道1つ分」のみ評価（複数候補があっても1枚しか使えない）
   if(joker > 0){
-    let jv = joker * 15;
-    // 革命補完候補（3枚組）があれば追加価値
-    if(rRev && fours3j.length > 0) jv += fours3j.length * 10;
-    // バラ牌をペアに補完できる
-    const weakSingles = NUMS.filter(n => n!==16 && (hand[n]||0)===1 && n<14);
-    if(weakSingles.length > 0) jv += 5;
-    if(joker === 2) jv += 10; // 2枚持ちボーナス
+    let jv = joker * 12;  // 基礎値（15→12に下げ）
+    // 革命補完候補がある場合：候補数に関わらず固定ボーナス（1回しか使えない）
+    if(rRev && fours3j.length > 0) jv += 8;
+    // ペア補完（革命補完がない場合のみ加算：使い道の優先順位）
+    else {
+      const weakSingles = NUMS.filter(n => n!==16 && (hand[n]||0)===1 && n<14);
+      if(weakSingles.length > 0) jv += 4;
+    }
+    if(joker === 2) jv += 8; // 2枚持ちボーナス（10→8）
     s += jv;
     bd.push({label:`JKR×${joker}`, val:jv, note:'最強 + 補完価値'});
   }
@@ -1146,14 +1149,16 @@ function evaluateHand(hand, r8, rRev) {
     bd.push({label:`2×${two}`, val:tv, note:'実質最強クラス'});
   }
 
-  // A
+  // A（革命なし時は強いが革命で弱くなるリスク込みで係数を抑える）
   if(ace > 0){
-    const av = ace * 6;
+    const av = ace * 5;  // 6→5に下げ
     s += av;
     bd.push({label:`A×${ace}`, val:av, note:'高ランク'});
   }
 
   // ── 革命評価（あり設定時のみ） ──
+  // JKR補完革命は「JKRの最も価値ある使い道」として評価するが、
+  // JKRの基礎点と二重計上しないよう補完革命スコアを抑制
   if(rRev){
     // 4枚組による革命
     for(const r of fours4){
@@ -1163,13 +1168,14 @@ function evaluateHand(hand, r8, rRev) {
                note:`革命後強度${(revScore.postStr*100).toFixed(0)}% 前捌きリスク-${revScore.waste}`});
     }
     // JKR補完革命（3枚組+JKR1枚）
-    if(joker >= 1){
-      for(const r of fours3j){
-        const revScore = _revScore(hand, r, 1, joker, two, ace);
-        s += revScore.net;
-        bd.push({label:`革命補完(${D[r]}+JKR)`, val:revScore.net,
-                 note:`革命後強度${(revScore.postStr*100).toFixed(0)}% 前捌きリスク-${revScore.waste}`});
-      }
+    // 複数候補があっても最も有利な1つだけ評価（二重計上防止）
+    if(joker >= 1 && fours3j.length > 0){
+      const bestRev = fours3j
+        .map(r => ({ r, rs: _revScore(hand, r, 1, joker, two, ace) }))
+        .sort((a,b) => b.rs.net - a.rs.net)[0];
+      s += bestRev.rs.net;
+      bd.push({label:`革命補完(${D[bestRev.r]}+JKR)`, val:bestRev.rs.net,
+               note:`革命後強度${(bestRev.rs.postStr*100).toFixed(0)}% 前捌きリスク-${bestRev.rs.waste}`});
     }
   }
 
