@@ -47,24 +47,24 @@ MX = len(NUMS) - 1  # 13
 
 # ── 初期係数（現行index.htmlの値） ────────────────────────────
 W_INIT = np.array([
-    12.0,   # 0  sz_bonus
-    35.0,   # 1  block_bonus
-    20.0,   # 2  eff_delta_w
-    15.0,   # 3  abs_eff_w
-    35.0,   # 4  loose_penalty
-    35.0,   # 5  late_nr_w
-    10.0,   # 6  late_bonus
-    18.0,   # 7  normal_weak_w
-    20.0,   # 8  normal_high_pen
-    10.0,   # 9  combo_low_w
-     3.0,   # 10 combo_high_w
-     8.0,   # 11 mid_nr_w
-    28.0,   # 12 rd1_bonus
-    20.0,   # 13 rd2_bonus
-    12.0,   # 14 rd3_bonus
-    18.0,   # 15 rd_large_pen
-    45.0,   # 16 danger_nr_w
-     8.0,   # 17 normal_nr_pen
+     5.612,  # 0  sz_bonus          （games=400 best=1.845）
+    36.334,  # 1  block_bonus
+    20.194,  # 2  eff_delta_w
+    14.441,  # 3  abs_eff_w
+    36.312,  # 4  loose_penalty
+    34.250,  # 5  late_nr_w
+    10.606,  # 6  late_bonus
+    22.094,  # 7  normal_weak_w
+    18.913,  # 8  normal_high_pen
+     3.235,  # 9  combo_low_w
+     1.068,  # 10 combo_high_w
+     4.270,  # 11 mid_nr_w
+    29.053,  # 12 rd1_bonus
+    19.932,  # 13 rd2_bonus
+    11.938,  # 14 rd3_bonus
+    18.019,  # 15 rd_large_pen
+    44.485,  # 16 danger_nr_w
+     7.080,  # 17 normal_nr_pen
 ], dtype=float)
 
 # ── ユーティリティ ────────────────────────────────────────────
