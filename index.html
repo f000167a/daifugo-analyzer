@@ -704,6 +704,7 @@ function looseRatio(hand){
 function pick(hand,field,rev,opp,rRev){
   const tot=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
   const oppMin=opp.length?Math.min(...opp):99;
+  const critical=oppMin<=2;
   const danger=oppMin<=3;
   const urgency=oppMin<=5;
   const mx=NUMS.length-1;
@@ -826,6 +827,16 @@ function pick(hand,field,rev,opp,rRev){
       // 2（num===15）は終盤まで温存
       if(num===15 && lateGame && sz<cnt) sc-=2.0;
 
+      // ── ⑦ 即上がりボーナス ──
+      const afterSum = NUMS.reduce((s,n)=>{
+        if(n===num) return s+Math.max(0,(hand[n]||0)-(sz-jUsed));
+        if(n===16)  return s+Math.max(0,(hand[n]||0)-jUsed);
+        return s+(hand[n]||0);
+      },0);
+      if(afterSum===0) sc+=500;
+      // critical時：この1手で上がれる手に追加ボーナス
+      else if(critical && afterSum<=2) sc+=50;
+
       cands.push([sc,num,sz,jUsed]);
     }
   }
@@ -833,8 +844,10 @@ function pick(hand,field,rev,opp,rRev){
   // JKR単体出し
   if(joker>0&&field&&field[1]===1){
     const nr=rk(16,rev)/mx; let sc=nr*50;
-    if(ultraLate) sc+=45;
+    if(tot===1) sc+=500; // JKR1枚のみ→即上がり
+    else if(ultraLate) sc+=45;
     else if(tot<=2) sc+=45;
+    else if(critical) sc+=40;
     else if(danger) sc+=55;
     else if(lateGame) sc-=10;
     else sc-=25;
@@ -844,8 +857,12 @@ function pick(hand,field,rev,opp,rRev){
     cands.push([sc,16,1,0]);
   } else if(joker>0&&!field){
     // JKR2枚持ちなら場なしでも積極的に使う
-    if(ultraLate && tot<=2){
+    if(tot===1){
+      cands.push([500,16,1,0]); // 即上がり
+    } else if(ultraLate && tot<=2){
       cands.push([rk(16,rev)/mx*45+35,16,1,0]);
+    } else if(critical){
+      cands.push([rk(16,rev)/mx*40+40,16,1,0]);
     } else if(joker>=2 && (lateGame||danger)){
       // 2枚持ち×終盤 or 危険時：1枚消費して場をリードする価値あり
       cands.push([rk(16,rev)/mx*40+15,16,1,0]);
@@ -861,14 +878,15 @@ function pick(hand,field,rev,opp,rRev){
 // 自分(pid=0)の手番で合法手ごとにN回ロールアウトし、期待着順最小の手を返す
 const MCTS_ROLLOUTS = 30; // 1手あたりのロールアウト数
 
-function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn){
+function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn, startCur){
   // 現在の局面から全員がpick()でプレイした場合の自分の着順を返す
   const plCopy = players.map(h=>({...h}));
   const active = [...activeIn];
   let fld = field ? [...field] : null;
   let rv = rev, cpass = cp, turn = 0;
   const rnk = [];
-  let cur = activeIn.indexOf(myIdx);
+  let cur = (startCur !== undefined) ? startCur : activeIn.indexOf(myIdx);
+  if(cur < 0 || cur >= active.length) cur = activeIn.indexOf(myIdx);
   if(cur < 0) return np; // すでに上がっている
 
   const sum = h => NUMS.reduce((s,n)=>s+(h[n]||0),0);
@@ -893,14 +911,14 @@ function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn){
     if(r8&&n2===8){
       fld=null; cpass=0;
       if(sum(h)===0){ rnk.push(pid); active.splice(active.indexOf(pid),1); }
-      if(active.length) cur=Math.floor(Math.random()*active.length);
+      if(active.length) cur=cur%active.length;
       continue;
     }
     if(sum(h)===0){
       rnk.push(pid);
       active.splice(active.indexOf(pid),1);
       fld=null; cpass=0;
-      if(active.length) cur=Math.floor(Math.random()*active.length);
+      if(active.length) cur=cur%active.length;
       continue;
     }
     cur = (cur+1) % active.length;
@@ -976,8 +994,10 @@ function mctsPick(hand, field, rev, opp, rRev, r8, np, players, myIdx, cp, activ
         }
       }
       // ロールアウト（次手番から）
-      const nextCur = (activeIn2.indexOf(myIdx)+1) % activeIn2.length;
-      const rank = mctsRollout(plCopy, myIdx, np, r8, rRev, fld, rv, cpass, activeIn2);
+      const myPos2 = activeIn2.indexOf(myIdx);
+      const is8cut = move && r8 && move.num === 8;
+      const nextCur = is8cut ? myPos2 % activeIn2.length : (myPos2 + 1) % activeIn2.length;
+      const rank = mctsRollout(plCopy, myIdx, np, r8, rRev, fld, rv, cpass, activeIn2, nextCur);
       totalRank += rank;
     }
     scores.set(key, {move, totalRank, avg: totalRank/MCTS_ROLLOUTS});
@@ -1040,18 +1060,18 @@ function simOnce(pH,np,r8,rRev,myPos,useMCTS){
     // fieldに記録するnumはn2（JKR補完でもベース数字で判定）
     field=[n2,sz];
     if(sz===4&&rRev)rev=!rev;
-    if(r8&&n2===8){ 
-      field=null; cp=0; 
+    if(r8&&n2===8){
+      field=null; cp=0;
       if(sum(h)===0){ rnk.push(pid); active.splice(active.indexOf(pid),1); }
-      if(active.length) cur=Math.floor(Math.random()*active.length);
-      continue; 
+      if(active.length) cur=cur%active.length;
+      continue;
     }
-    if(sum(h)===0){ 
+    if(sum(h)===0){
       rnk.push(pid);
       active.splice(active.indexOf(pid),1);
-      field=null; cp=0; 
-      if(active.length) cur=Math.floor(Math.random()*active.length);
-      continue; 
+      field=null; cp=0;
+      if(active.length) cur=cur%active.length;
+      continue;
     }
     cur=(cur+1)%active.length;
   }
