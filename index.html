@@ -1544,8 +1544,16 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
     }
   }
   
+  // 手札全体が弱い（1位率が平均を下回る）か：tooltipの煽り表現を文脈に合わせるフラグ
+  const weakHand = p1 < T_mid;
+
   // 2（最強通常カード）
-  if((hand[15]||0)>=2) tips.push({b:`2×${hand[15]}`,c:'g',t:`<strong>最強通常カードを${hand[15]}枚保持</strong>。場の制圧力が高い。序盤は温存し、相手が2で上がりを狙うタイミングに合わせてカウンターを。`});
+  if((hand[15]||0)>=2){
+    if(weakHand)
+      tips.push({b:`2×${hand[15]}`,c:'',t:`<strong>最強通常カードを${hand[15]}枚保持</strong>。ただし手札全体は鈍重で、2は<strong>最下位回避の保険</strong>として効く一方、1位を取り切る力は限定的。序盤に温存しすぎると手札が捌けず終盤に詰まるため、中盤で流れを作る使い方も検討する。`});
+    else
+      tips.push({b:`2×${hand[15]}`,c:'g',t:`<strong>最強通常カードを${hand[15]}枚保持</strong>。場の制圧力が高い。序盤は温存し、相手が2で上がりを狙うタイミングに合わせてカウンターを。`});
+  }
   else if(has2&&!joker) tips.push({b:'2×1',c:'g',t:'2枚は最強の通常カード。<strong>終盤の確実な上がりの保険</strong>として温存が基本。ただし手数が多い場合は中盤で使って流れを作ることも選択肢。'});
   
   // Aカード
@@ -1569,7 +1577,10 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
   // トリプル
   if(triples.length) {
     const tn=triples.map(n=>D[n]).join('・');
-    tips.push({b:`3枚組 ${tn}`,c:'',t:`<strong>${tn}の3枚組</strong>は3枚出しの場で圧倒的に強い。相手に同じ手がなければほぼ通る。3枚縛りの場を自分で作ることも検討。`});
+    if(weakHand)
+      tips.push({b:`3枚組 ${tn}`,c:'',t:`<strong>${tn}の3枚組</strong>は3枚縛りの場では強いが、<strong>自分でリードしないと出せず機会が限られる</strong>。手札全体が鈍重なため、温存より「自分から3枚縛りを仕掛けて一気に枚数を削る」消化手段として使う。`});
+    else
+      tips.push({b:`3枚組 ${tn}`,c:'',t:`<strong>${tn}の3枚組</strong>は3枚出しの場で圧倒的に強い。相手に同じ手がなければほぼ通る。3枚縛りの場を自分で作ることも検討。`});
   }
   
   // 低カードのみ
