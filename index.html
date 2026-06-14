@@ -1396,6 +1396,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
   const has8=(hand[8]||0)>0&&r8;
   const lowOnly=NUMS.filter(n=>n<=7).reduce((s,n)=>s+(hand[n]||0),0);
   const total=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
+  const singlesCount=NUMS.filter(n=>n!==16&&(hand[n]||0)===1).length;
   const highRatio=high/total;
   const p1=rates[1], p2=rates[2]||0, pLast=rates[np]||0;
 
@@ -1570,8 +1571,9 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
     tips.push({b:'手番奪取が弱点',c:'r',t:`<strong>2・JKRが無く、一度パスすると手番を取り返しにくい</strong>。トリプルや革命など見た目の強さはあるが、最上位の札が乏しい。自分からリードして場を支配するか、${rRev&&fours.length?'革命で':''}流れを作る展開を意識する。`});
   }
 
-  // ペア
-  if(pairs>=5) tips.push({b:`ペア×${pairs}`,c:'',t:`ペアが豊富（${pairs}種）。<strong>ペア縛りの場を自分で作れる</strong>のが強み。積極的に2枚出しをリードし、相手のバラ牌を無力化する。`});
+  // ペア（バラ枚数も見て豊富かどうか判断）
+  if(pairs>=5 && singlesCount<=5) tips.push({b:`ペア×${pairs}`,c:'',t:`ペアが豊富（${pairs}種）。<strong>ペア縛りの場を自分で作れる</strong>のが強み。積極的に2枚出しをリードし、相手のバラ牌を無力化する。`});
+  else if(pairs>=5) tips.push({b:`ペア×${pairs}`,c:'',t:`ペアは${pairs}種あるがバラ牌も多い（${singlesCount}枚）。<strong>ペア縛りで手番を取りやすいが、バラの処理が滞ると枚数が減らない</strong>。まずペア縛りをリードしてバラを出す機会を作る。`});
   else if(pairs>=3) tips.push({b:`ペア×${pairs}`,c:'',t:`ペア${pairs}種あり。2枚出しの場では強い。<strong>状況に応じてペア縛りをリードし</strong>手数を減らす。`});
   
   // トリプル
