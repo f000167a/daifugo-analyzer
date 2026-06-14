@@ -315,7 +315,7 @@ def sim_once(p_hand, np_, r8, r_rev, W):
                 rnk.append(pid)
                 active.remove(pid)
             if active:
-                cur = random.randint(0, len(active) - 1)
+                cur = cur % len(active)
             continue
         if hand_sum(h) == 0:
             rnk.append(pid)
@@ -323,7 +323,7 @@ def sim_once(p_hand, np_, r8, r_rev, W):
             field = None
             cp    = 0
             if active:
-                cur = random.randint(0, len(active) - 1)
+                cur = cur % len(active)
             continue
         cur = (cur + 1) % len(active)
 
@@ -550,7 +550,7 @@ EW_LABELS = [
     "eight_w",       # 8切り係数（元:5）
     "no_strong_pen", # 強カードなしペナルティ（元:10）
 ]
-EW_INIT = np.array([3., 12., 8., 4., 8., 12., 5., 4., 5., 4., 5., 10.])
+EW_INIT = np.array([0., 12., 8., 4., 8., 12., 5., 4., 5., 4., 5., 10.])
 
 def eval_hand_score(hand, r8, r_rev, EW):
     """EWベクトルを使ってevaluateHandのスコアを計算（train.py内部用）"""
@@ -599,7 +599,7 @@ def eval_hand_score(hand, r8, r_rev, EW):
     # 強カードなし
     if joker == 0 and two == 0 and ace == 0: s -= EW[11]
 
-    score = max(0., min(100., (s + 30.) * 100. / 130.))
+    score = max(0., min(100., (s + 15.) * 100. / 115.))
     return score
 
 def _revScore(hand, revNum, jUsed, joker, two, ace):

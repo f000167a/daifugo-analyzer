@@ -704,6 +704,7 @@ function looseRatio(hand){
 function pick(hand,field,rev,opp,rRev){
   const tot=NUMS.reduce((s,n)=>s+(hand[n]||0),0);
   const oppMin=opp.length?Math.min(...opp):99;
+  const critical=oppMin<=2;
   const danger=oppMin<=3;
   const urgency=oppMin<=5;
   const mx=NUMS.length-1;
@@ -826,6 +827,16 @@ function pick(hand,field,rev,opp,rRev){
       // 2（num===15）は終盤まで温存
       if(num===15 && lateGame && sz<cnt) sc-=2.0;
 
+      // ── ⑦ 即上がりボーナス ──
+      const afterSum = NUMS.reduce((s,n)=>{
+        if(n===num) return s+Math.max(0,(hand[n]||0)-(sz-jUsed));
+        if(n===16)  return s+Math.max(0,(hand[n]||0)-jUsed);
+        return s+(hand[n]||0);
+      },0);
+      if(afterSum===0) sc+=500;
+      // critical時：この1手で上がれる手に追加ボーナス
+      else if(critical && afterSum<=2) sc+=50;
+
       cands.push([sc,num,sz,jUsed]);
     }
   }
@@ -833,8 +844,10 @@ function pick(hand,field,rev,opp,rRev){
   // JKR単体出し
   if(joker>0&&field&&field[1]===1){
     const nr=rk(16,rev)/mx; let sc=nr*50;
-    if(ultraLate) sc+=45;
+    if(tot===1) sc+=500; // JKR1枚のみ→即上がり
+    else if(ultraLate) sc+=45;
     else if(tot<=2) sc+=45;
+    else if(critical) sc+=40;
     else if(danger) sc+=55;
     else if(lateGame) sc-=10;
     else sc-=25;
@@ -844,8 +857,12 @@ function pick(hand,field,rev,opp,rRev){
     cands.push([sc,16,1,0]);
   } else if(joker>0&&!field){
     // JKR2枚持ちなら場なしでも積極的に使う
-    if(ultraLate && tot<=2){
+    if(tot===1){
+      cands.push([500,16,1,0]); // 即上がり
+    } else if(ultraLate && tot<=2){
       cands.push([rk(16,rev)/mx*45+35,16,1,0]);
+    } else if(critical){
+      cands.push([rk(16,rev)/mx*40+40,16,1,0]);
     } else if(joker>=2 && (lateGame||danger)){
       // 2枚持ち×終盤 or 危険時：1枚消費して場をリードする価値あり
       cands.push([rk(16,rev)/mx*40+15,16,1,0]);
@@ -861,14 +878,15 @@ function pick(hand,field,rev,opp,rRev){
 // 自分(pid=0)の手番で合法手ごとにN回ロールアウトし、期待着順最小の手を返す
 const MCTS_ROLLOUTS = 30; // 1手あたりのロールアウト数
 
-function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn){
+function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn, startCur){
   // 現在の局面から全員がpick()でプレイした場合の自分の着順を返す
   const plCopy = players.map(h=>({...h}));
   const active = [...activeIn];
   let fld = field ? [...field] : null;
   let rv = rev, cpass = cp, turn = 0;
   const rnk = [];
-  let cur = activeIn.indexOf(myIdx);
+  let cur = (startCur !== undefined) ? startCur : activeIn.indexOf(myIdx);
+  if(cur < 0 || cur >= active.length) cur = activeIn.indexOf(myIdx);
   if(cur < 0) return np; // すでに上がっている
 
   const sum = h => NUMS.reduce((s,n)=>s+(h[n]||0),0);
@@ -893,14 +911,14 @@ function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn){
     if(r8&&n2===8){
       fld=null; cpass=0;
       if(sum(h)===0){ rnk.push(pid); active.splice(active.indexOf(pid),1); }
-      if(active.length) cur=Math.floor(Math.random()*active.length);
+      if(active.length) cur=cur%active.length;
       continue;
     }
     if(sum(h)===0){
       rnk.push(pid);
       active.splice(active.indexOf(pid),1);
       fld=null; cpass=0;
-      if(active.length) cur=Math.floor(Math.random()*active.length);
+      if(active.length) cur=cur%active.length;
       continue;
     }
     cur = (cur+1) % active.length;
@@ -976,8 +994,10 @@ function mctsPick(hand, field, rev, opp, rRev, r8, np, players, myIdx, cp, activ
         }
       }
       // ロールアウト（次手番から）
-      const nextCur = (activeIn2.indexOf(myIdx)+1) % activeIn2.length;
-      const rank = mctsRollout(plCopy, myIdx, np, r8, rRev, fld, rv, cpass, activeIn2);
+      const myPos2 = activeIn2.indexOf(myIdx);
+      const is8cut = move && r8 && move.num === 8;
+      const nextCur = is8cut ? myPos2 % activeIn2.length : (myPos2 + 1) % activeIn2.length;
+      const rank = mctsRollout(plCopy, myIdx, np, r8, rRev, fld, rv, cpass, activeIn2, nextCur);
       totalRank += rank;
     }
     scores.set(key, {move, totalRank, avg: totalRank/MCTS_ROLLOUTS});
@@ -1040,18 +1060,18 @@ function simOnce(pH,np,r8,rRev,myPos,useMCTS){
     // fieldに記録するnumはn2（JKR補完でもベース数字で判定）
     field=[n2,sz];
     if(sz===4&&rRev)rev=!rev;
-    if(r8&&n2===8){ 
-      field=null; cp=0; 
+    if(r8&&n2===8){
+      field=null; cp=0;
       if(sum(h)===0){ rnk.push(pid); active.splice(active.indexOf(pid),1); }
-      if(active.length) cur=Math.floor(Math.random()*active.length);
-      continue; 
+      if(active.length) cur=cur%active.length;
+      continue;
     }
-    if(sum(h)===0){ 
+    if(sum(h)===0){
       rnk.push(pid);
       active.splice(active.indexOf(pid),1);
-      field=null; cp=0; 
-      if(active.length) cur=Math.floor(Math.random()*active.length);
-      continue; 
+      field=null; cp=0;
+      if(active.length) cur=cur%active.length;
+      continue;
     }
     cur=(cur+1)%active.length;
   }
@@ -1523,8 +1543,8 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
   
   // 8切り
   if(has8){
-    if((hand[8]||0)>=2) tips.push({b:`8切り×${hand[8]}`,c:'',t:`8が${hand[8]}枚。<strong>複数の8切りは場のリセット権を複数持つ</strong>ということ。相手の連打を2度断ち切れる。強手が続く場面・上がりたい直前に使う。`});
-    else tips.push({b:'8切り',c:'',t:'相手の連打を断ち切れる場リセット札。<strong>強手が続く場面や自分が上がり直前</strong>で使うのが最も効果的。ただし上がり時に8を最後に使うことはできないので注意。'});
+    if((hand[8]||0)>=2) tips.push({b:`8切り×${hand[8]}`,c:'',t:`8が${hand[8]}枚。<strong>8切りは7以下の場限定のリセット手</strong>。相手が低カードを出してきたタイミングにしか使えない。使える機会は限られるので温存しすぎず、手番を取り直したいときに積極的に切る。`});
+    else tips.push({b:'8切り',c:'',t:'<strong>7以下の場にしか出せない限定的なリセット手</strong>。使えるタイミングは少ないが、場を断ち切って手番を取り直せる。上がり時に8を最後に使うことはできないので注意。'});
   }
   
   // ペア
@@ -1657,7 +1677,7 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
     paras.push(`中程度の手札（1位率${p1}%）。現状維持が基本。無理に富豪を狙わず、${triDesc ? triDesc+'のトリプルや' : ''}ペアを活かして手番を確保しながら枚数を削る。強カードは切り返し用に残す。`);
   } else {
     // 平民・弱手
-    paras.push(`苦しい手札（1位率${p1}%）。現状維持を目標に手番確保を優先する。${r8 && (hand[8]||0)>0 ? '8切りで場をリセットして手番を作りながら、' : ''}着実に枚数を削ることに集中する。`);
+    paras.push(`苦しい手札（1位率${p1}%）。現状維持を目標に手番確保を優先する。${r8 && (hand[8]||0)>0 ? '相手が7以下を出したタイミングに8切りで手番を取り直しながら、' : ''}着実に枚数を削ることに集中する。`);
   }
 
   // ── 段落2：手札固有の戦術ポイント ──
@@ -1702,7 +1722,7 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   } else if(pLast2 >= 45){
     priority = `最下位転落リスクが高い（${pLast2}%）。1位より<strong>確実に手札を処理して上がりきること</strong>を優先する。`;
   } else if(pLast2 >= 35 && p1 < 30){
-    priority = `苦しい手。<strong>最下位回避を優先</strong>（最下位${pLast2}%）。8切りで手番を確保しながら守る。`;
+    priority = `苦しい手。<strong>最下位回避を優先</strong>（最下位${pLast2}%）。相手が低カードを出した隙に8切りで手番を取り直しながら守る。`;
   } else if(hasRevPlan && dumpDesc && p1 < 40){
     priority = `革命前に <strong>${dumpDesc}</strong> を処理し、革命で局面を変える。`;
   } else if(hasRevPlan && !hasStrong && p1 < 40){
@@ -1719,7 +1739,7 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   } else if(triples.length > 0 && pLast2 < 30){
     priority = `トリプルを軸に3枚縛りを仕掛ける。相手が対応できなければそのまま押し切る。`;
   } else {
-    priority = `難しい手。8切り・場のリセットを使って手番を確保しながら着実に枚数を削る。`;
+    priority = `難しい手。相手が7以下を出した隙に8切りでリセットし、手番を確保しながら着実に枚数を削る。`;
   }
 
   // ── 描画 ──
