@@ -1543,8 +1543,8 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
   
   // 8切り
   if(has8){
-    if((hand[8]||0)>=2) tips.push({b:`8切り×${hand[8]}`,c:'',t:`8が${hand[8]}枚。<strong>複数の8切りは場のリセット権を複数持つ</strong>ということ。相手の連打を2度断ち切れる。強手が続く場面・上がりたい直前に使う。`});
-    else tips.push({b:'8切り',c:'',t:'相手の連打を断ち切れる場リセット札。<strong>強手が続く場面や自分が上がり直前</strong>で使うのが最も効果的。ただし上がり時に8を最後に使うことはできないので注意。'});
+    if((hand[8]||0)>=2) tips.push({b:`8切り×${hand[8]}`,c:'',t:`8が${hand[8]}枚。<strong>8切りは7以下の場限定のリセット手</strong>。相手が低カードを出してきたタイミングにしか使えない。使える機会は限られるので温存しすぎず、手番を取り直したいときに積極的に切る。`});
+    else tips.push({b:'8切り',c:'',t:'<strong>7以下の場にしか出せない限定的なリセット手</strong>。使えるタイミングは少ないが、場を断ち切って手番を取り直せる。上がり時に8を最後に使うことはできないので注意。'});
   }
   
   // ペア
@@ -1677,7 +1677,7 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
     paras.push(`中程度の手札（1位率${p1}%）。現状維持が基本。無理に富豪を狙わず、${triDesc ? triDesc+'のトリプルや' : ''}ペアを活かして手番を確保しながら枚数を削る。強カードは切り返し用に残す。`);
   } else {
     // 平民・弱手
-    paras.push(`苦しい手札（1位率${p1}%）。現状維持を目標に手番確保を優先する。${r8 && (hand[8]||0)>0 ? '8切りで場をリセットして手番を作りながら、' : ''}着実に枚数を削ることに集中する。`);
+    paras.push(`苦しい手札（1位率${p1}%）。現状維持を目標に手番確保を優先する。${r8 && (hand[8]||0)>0 ? '相手が7以下を出したタイミングに8切りで手番を取り直しながら、' : ''}着実に枚数を削ることに集中する。`);
   }
 
   // ── 段落2：手札固有の戦術ポイント ──
@@ -1722,7 +1722,7 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   } else if(pLast2 >= 45){
     priority = `最下位転落リスクが高い（${pLast2}%）。1位より<strong>確実に手札を処理して上がりきること</strong>を優先する。`;
   } else if(pLast2 >= 35 && p1 < 30){
-    priority = `苦しい手。<strong>最下位回避を優先</strong>（最下位${pLast2}%）。8切りで手番を確保しながら守る。`;
+    priority = `苦しい手。<strong>最下位回避を優先</strong>（最下位${pLast2}%）。相手が低カードを出した隙に8切りで手番を取り直しながら守る。`;
   } else if(hasRevPlan && dumpDesc && p1 < 40){
     priority = `革命前に <strong>${dumpDesc}</strong> を処理し、革命で局面を変える。`;
   } else if(hasRevPlan && !hasStrong && p1 < 40){
@@ -1739,7 +1739,7 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   } else if(triples.length > 0 && pLast2 < 30){
     priority = `トリプルを軸に3枚縛りを仕掛ける。相手が対応できなければそのまま押し切る。`;
   } else {
-    priority = `難しい手。8切り・場のリセットを使って手番を確保しながら着実に枚数を削る。`;
+    priority = `難しい手。相手が7以下を出した隙に8切りでリセットし、手番を確保しながら着実に枚数を削る。`;
   }
 
   // ── 描画 ──
