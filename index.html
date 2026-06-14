@@ -1544,7 +1544,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
   // 8切り
   if(has8){
     if((hand[8]||0)>=2) tips.push({b:`8切り×${hand[8]}`,c:'',t:`8が${hand[8]}枚。<strong>8切りは7以下の場限定のリセット手</strong>。相手が低カードを出してきたタイミングにしか使えない。使える機会は限られるので温存しすぎず、手番を取り直したいときに積極的に切る。`});
-    else tips.push({b:'8切り',c:'',t:'<strong>7以下の場にしか出せない限定的なリセット手</strong>。使えるタイミングは少ないが、場を断ち切って手番を取り直せる。上がり時に8を最後に使うことはできないので注意。'});
+    else tips.push({b:'8切り',c:'',t:'<strong>7以下の場にしか出せない限定的なリセット手</strong>。使えるタイミングは少ないが、場を断ち切って手番を取り直せる。最後の1枚を8で出して上がることもできる。'});
   }
   
   // ペア
@@ -1693,7 +1693,7 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
     tactics.push(`${revDesc}で革命も狙えるが、強カードが揃っているので必須ではない。盤面が優勢なら温存でよい。`);
   }
   if(has2 >= 2 && !defMode){
-    tactics.push(`2×${has2}は相手が上がりを狙うタイミングに合わせて使う制圧手段。`);
+    tactics.push(`2×${has2}は場をリードして主導権を握れる主力札。相手の上がり狙いへのカウンターにも、自分の上がり札にも使える。`);
   } else if(has2 === 1 && !defMode){
     tactics.push(`2は相手の上がりへのカウンター用に温存する。`);
   } else if(has2 >= 1 && defMode){
