@@ -1,0 +1,8 @@
+# Python
+__pycache__/
+*.pyc
+
+# 学習の一時生成物（ローカルのみ）
+train_run.log
+nohup.out
+results.jsonl

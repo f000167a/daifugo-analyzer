@@ -521,24 +521,24 @@ function updateHandHint(){
 // ── pick()係数ベクトル（train.pyと同順） ──────────────────────
 // W[0]〜W[17]: 各スコア係数。train.pyの最適化結果をここに反映する。
 const W_DEFAULT = [
-   5.940,  // 0  sz_bonus          （新pick() games=400 best=1.750）
-  35.091,  // 1  block_bonus
-  21.218,  // 2  eff_delta_w
-  15.977,  // 3  abs_eff_w
-  36.185,  // 4  loose_penalty
-  34.731,  // 5  late_nr_w
-  10.059,  // 6  late_bonus
-  19.787,  // 7  normal_weak_w
-  20.622,  // 8  normal_high_pen
-   4.455,  // 9  combo_low_w
-   1.484,  // 10 combo_high_w
-   6.756,  // 11 mid_nr_w
-  28.588,  // 12 rd1_bonus
-  20.663,  // 13 rd2_bonus
-  12.537,  // 14 rd3_bonus
-  18.503,  // 15 rd_large_pen
-  44.601,  // 16 danger_nr_w
-   6.952,  // 17 normal_nr_pen
+   6.222,  // 0  sz_bonus          （手番バグ修正後の再学習 games=400 best=1.900）
+  35.165,  // 1  block_bonus
+  21.069,  // 2  eff_delta_w
+  15.879,  // 3  abs_eff_w
+  36.295,  // 4  loose_penalty
+  34.683,  // 5  late_nr_w
+   9.987,  // 6  late_bonus
+  19.753,  // 7  normal_weak_w
+  20.549,  // 8  normal_high_pen
+   4.708,  // 9  combo_low_w
+   1.389,  // 10 combo_high_w
+   6.720,  // 11 mid_nr_w
+  28.653,  // 12 rd1_bonus
+  20.658,  // 13 rd2_bonus
+  12.534,  // 14 rd3_bonus
+  18.516,  // 15 rd_large_pen
+  44.509,  // 16 danger_nr_w
+   6.925,  // 17 normal_nr_pen
 ];
 let W = [...W_DEFAULT]; // mutableなコピー（学習結果で上書き可能）
 
@@ -1399,14 +1399,21 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
   const highRatio=high/total;
   const p1=rates[1], p2=rates[2]||0, pLast=rates[np]||0;
 
+  // ── 人数依存の閾値（基準=100/np）。3人戦の従来値を倍率で表現 ──
+  const base = 100 / np;
+  const T_strong  = base * 1.50; // 3人→50
+  const T_vstrong = base * 1.80; // 3人→60
+  const T_mid     = base * 0.90; // 3人→30
+  const T_lowmid  = base * 1.05; // 3人→35
+
   // ── 役職アドバイス ──
   // 2軸評価：富豪確率（1位率）と貧民確率（最下位率）
   const fugoRate  = p1;                              // 高いほど良い
   const hinminRate = pLast;                          // 低いほど良い
-  const fugoHigh  = fugoRate >= 50;
-  const fugoMid   = fugoRate >= 30;
-  const hinHigh   = hinminRate >= 35;
-  const hinMid    = hinminRate >= 20;
+  const fugoHigh  = fugoRate >= T_strong;
+  const fugoMid   = fugoRate >= T_mid;
+  const hinHigh   = hinminRate >= base * 1.05;       // 3人→35
+  const hinMid    = hinminRate >= base * 0.60;       // 3人→20
 
   // 富豪確率・貧民確率の色
   const fugoCol  = fugoHigh ? 'var(--green)' : fugoMid ? 'var(--acc)' : 'var(--red)';
@@ -1435,8 +1442,8 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
   // ── 役職別コメント ──
   if(pos === '富豪'){
     const doraku     = Math.round((100 - p1) * 10) / 10;
-    const dorakuHigh = doraku >= 70;
-    const dorakuMid  = doraku >= 50;
+    const dorakuHigh = p1 <= T_mid;    // 平均1位率を大きく下回る＝高リスク
+    const dorakuMid  = p1 <= T_strong; // 平均並み以下＝中リスク
     ph += `<div class="aitem" style="border-left:3px solid ${dorakuHigh?'var(--red)':dorakuMid?'var(--acc)':'var(--bdr2)'};padding-left:10px">`;
     ph += `<span class="badge" style="background:${dorakuHigh?'var(--red)':dorakuMid?'var(--acc)':'var(--bg2)'};color:${dorakuHigh||dorakuMid?'#fff':'var(--txt2)'}">都落ちリスク ${doraku}%</span>　`;
     if(dorakuHigh){
@@ -1579,8 +1586,8 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
   // ── 確率の解釈ガイド ──
   const kb=document.createElement('div'); kb.className='abox'; kb.style.animationDelay='.14s';
   let kh=`<div class="atitle">確率の読み方</div>`;
-  if(p1>=60) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は強い手札。ただし大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
-  else if(p1>=35) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は標準的な手札の強さ。大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
+  if(p1>=T_vstrong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は強い手札。ただし大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
+  else if(p1>=T_lowmid) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は標準的な手札の強さ。大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
   else kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は苦しい手。最下位確率が<strong>${pLast}%</strong>あることも念頭に置く。リスクを取って攻めるか、確実に中位を守るかの判断が問われる局面。</div>`;
   kb.innerHTML=kh; adv.appendChild(kb);
 }
@@ -1630,7 +1637,23 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   const pLast2 = rates[np];
   const pos    = document.getElementById('myPos').value;
   const doraku = 100 - p1;
-  const defMode     = pLast2 >= 45;
+  // ── 人数依存の強さ閾値（基準1位率=100/np に対する相対値）──
+  // 3人戦の従来値（50/55/40/35/30）を base=33.3 基準の倍率で表現し、
+  // 4人・5人戦でも同じ相対感覚で判定できるようにする。
+  const base = 100 / np;
+  const TH = {
+    vstrong: base * 1.65, // 3人→55
+    strong:  base * 1.50, // 3人→50
+    good:    base * 1.20, // 3人→40
+    lowmid:  base * 1.05, // 3人→35
+    mid:     base * 0.90, // 3人→30
+  };
+  const PL = {            // 最下位率の閾値（基準も 100/np）
+    def:  base * 1.35,    // 3人→45（守備モード）
+    high: base * 1.05,    // 3人→35
+    low:  base * 0.90,    // 3人→30
+  };
+  const defMode     = pLast2 >= PL.def;
   const weakSingles = singles.filter(n => n < 11).length;
   const allSingles  = singles.length;
   const hasStrong   = has2 > 0 || joker > 0;
@@ -1646,20 +1669,20 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   const paras = [];
 
   // ── 段落1：立場と基本スタンス ──
-  if(isFugo && doraku >= 70 && hasRevPlan){
+  if(isFugo && p1 <= TH.mid && hasRevPlan){
     // 富豪ピンチ×革命候補あり：革命前に上位カードを消化する戦略
     paras.push(`都落ちリスクが高い（${doraku.toFixed(0)}%）が、革命候補がある。${dumpDesc ? dumpDesc+'などの上位カードを先に消化しながら' : '上位カードを先に整理しながら'}頃合いを見て革命を決めると、残り手が一気に強くなる。革命後は枚数が少なくそのまま押し切れる展開が狙える。`);
-  } else if(isFugo && doraku >= 70){
+  } else if(isFugo && p1 <= TH.mid){
     // 富豪ピンチ：正解がない難局、選択肢を提示
     paras.push(`都落ちリスクが高い（${doraku.toFixed(0)}%）。難しい局面で正解はないが、選択肢は2つある。①弱いカードから先出しして場を取り、相手に強カードを使わせるブラフ戦略。②ペアを温存して終盤に一気に枚数を削る逆転狙い。相手の手の強さを見ながら判断する。`);
-  } else if(isFugo && p1 >= 50){
+  } else if(isFugo && p1 >= TH.strong){
     paras.push(`富豪キープの可能性が高い（1位率${p1}%）。現状維持が基本方針。強カードを序盤に消耗せず、中盤以降に相手が消耗したタイミングで制圧する。`);
   } else if(isFugo && hasRevPlan){
     // 富豪やや弱×革命候補あり
     paras.push(`富豪だが手札は弱い（1位率${p1}%）。革命候補があるので${dumpDesc ? dumpDesc+'を先に消化しながら' : '上位カードを整理しながら'}革命のタイミングを狙う戦略が取れる。革命後の残り手が強くなるほど有効。都落ちリスク${doraku.toFixed(0)}%は意識しつつ、革命で局面を変えることも視野に入れる。`);
   } else if(isFugo){
     paras.push(`富豪だが手札は弱い（1位率${p1}%、都落ちリスク${doraku.toFixed(0)}%）。難しい局面で正解はないが、選択肢は2つある。①弱いカードから先出しして場を取り、相手に強カードを使わせるブラフ戦略。②ペアを温存して終盤に一気に枚数を削る逆転狙い。`);
-  } else if(isHinmin && p1 >= 40){
+  } else if(isHinmin && p1 >= TH.good){
     // 貧民強手：まず平民昇格が現実的目標
     paras.push(`貧民だが手札が揃っている（1位率${p1}%）。目標はまず平民昇格（最下位脱出）。強カードをうまく使って場をリードし、確実に上位圏に入ることを優先する。1位が狙える展開になれば積極的に狙う。`);
   } else if(isHinmin && defMode){
@@ -1669,10 +1692,10 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   } else if(defMode){
     // 平民・弱手：現状維持（最下位回避）
     paras.push(`手札が弱く最下位転落リスクが高い（${pLast2}%）。現状維持（平民確保）が優先。攻めより手番確保を意識し、トリプル・ペアは縛りより枚数消化の手段として使う。`);
-  } else if(p1 >= 50){
+  } else if(p1 >= TH.strong){
     // 平民・強手：富豪昇格を狙う
     paras.push(`強い手札（1位率${p1}%）。富豪昇格を狙えるチャンス。${strongDesc ? strongDesc+'を軸に' : ''}場をリードしながら着実に枚数を削る。強カードは相手が上がりを狙うタイミングに合わせて制圧する。`);
-  } else if(p1 >= 30){
+  } else if(p1 >= TH.mid){
     // 平民・中間手：現状維持
     paras.push(`中程度の手札（1位率${p1}%）。現状維持が基本。無理に富豪を狙わず、${triDesc ? triDesc+'のトリプルや' : ''}ペアを活かして手番を確保しながら枚数を削る。強カードは切り返し用に残す。`);
   } else {
@@ -1687,20 +1710,20 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   } else if(triDesc && defMode){
     tactics.push(`${triDesc}のトリプルはリードより消化優先。3枚まとめて出して手数を一気に減らす。`);
   }
-  if(revDesc && p1 < 40){
+  if(revDesc && p1 < TH.good){
     tactics.push(`${revDesc}で革命が狙える。${dumpDesc ? dumpDesc+'を先に処理しておくと革命後の残り手が動きやすい。' : '革命後の残り手の強さを確認してから判断する。'}`);
-  } else if(revDesc && p1 >= 40){
+  } else if(revDesc && p1 >= TH.good){
     tactics.push(`${revDesc}で革命も狙えるが、強カードが揃っているので必須ではない。盤面が優勢なら温存でよい。`);
   }
   if(has2 >= 2 && !defMode){
     tactics.push(`2×${has2}は場をリードして主導権を握れる主力札。相手の上がり狙いへのカウンターにも、自分の上がり札にも使える。`);
   } else if(has2 === 1 && !defMode){
-    tactics.push(`2は相手の上がりへのカウンター用に温存する。`);
+    tactics.push(`2は強力なリード/上がり札。序盤の浪費は避けつつ、相手の上がり狙いへのカウンターや自分の上がりに活かす。`);
   } else if(has2 >= 1 && defMode){
     tactics.push(`2は出し惜しみせず、残り手が少なくなったら確実に上がるために使う。`);
   }
   if(joker >= 1 && !defMode){
-    tactics.push(`JKR${joker>=2?'×'+joker:''}は終盤まで温存。${revWith3j.length>0&&p1<40?'革命補完にも使える。':''}`);
+    tactics.push(`JKR${joker>=2?'×'+joker:''}は最強札。基本は中終盤まで温存しつつ、上がりやリードのチャンスでは惜しまず使う。${revWith3j.length>0&&p1<TH.good?'革命補完にも使える。':''}`);
   } else if(joker >= 1 && defMode){
     tactics.push(`JKRも温存より完走優先。手番が来たら確実に消化する。`);
   }
@@ -1713,30 +1736,30 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
 
   // ── 最優先事項 ──
   let priority = '';
-  if(isFugo && doraku >= 70 && hasRevPlan){
+  if(isFugo && p1 <= TH.mid && hasRevPlan){
     priority = `都落ちリスク高（${doraku.toFixed(0)}%）。<strong>${dumpDesc ? dumpDesc+'を先に消化しながら革命のタイミングを狙う' : '上位カードを整理しながら革命で局面を変える'}</strong>。`;
-  } else if(isFugo && doraku >= 70){
+  } else if(isFugo && p1 <= TH.mid){
     priority = `都落ちリスク高（${doraku.toFixed(0)}%）。革命・ギャンブル手は封印し、<strong>確実に1位を取ることだけ</strong>を考える。`;
-  } else if(isFugo && doraku >= 50){
+  } else if(isFugo && p1 <= TH.strong){
     priority = `都落ちリスクあり（${doraku.toFixed(0)}%）。リスクの高い手は避け、<strong>安定した上がりを最優先</strong>に。`;
-  } else if(pLast2 >= 45){
+  } else if(pLast2 >= PL.def){
     priority = `最下位転落リスクが高い（${pLast2}%）。1位より<strong>確実に手札を処理して上がりきること</strong>を優先する。`;
-  } else if(pLast2 >= 35 && p1 < 30){
+  } else if(pLast2 >= PL.high && p1 < TH.mid){
     priority = `苦しい手。<strong>最下位回避を優先</strong>（最下位${pLast2}%）。相手が低カードを出した隙に8切りで手番を取り直しながら守る。`;
-  } else if(hasRevPlan && dumpDesc && p1 < 40){
+  } else if(hasRevPlan && dumpDesc && p1 < TH.good){
     priority = `革命前に <strong>${dumpDesc}</strong> を処理し、革命で局面を変える。`;
-  } else if(hasRevPlan && !hasStrong && p1 < 40){
+  } else if(hasRevPlan && !hasStrong && p1 < TH.good){
     priority = `革命が唯一の逆転手段。序盤から革命前提で動く。`;
   } else if(weakSingles >= 4){
     const names = singles.filter(n => n < 11).map(n => D[n]).join('・');
     priority = `<strong>${names} のバラ牌処理が最優先</strong>。手番効率が悪いまま終盤を迎えると出せなくなる。`;
-  } else if(p1 >= 55){
+  } else if(p1 >= TH.vstrong){
     priority = `手札は強い。強カードを温存しつつ中位手から丁寧に処理し、制圧する。`;
-  } else if(p1 >= 35){
+  } else if(p1 >= TH.lowmid){
     priority = `中程度の手。場の主導権を取れるタイミングを見極め、無駄な強カード消費を避ける。`;
-  } else if(pairs.length >= 4 && weakSingles <= 2 && pLast2 < 30){
+  } else if(pairs.length >= 4 && weakSingles <= 2 && pLast2 < PL.low){
     priority = `ペアが豊富。<strong>ペア縛りの場を自分からリード</strong>し、相手のバラ牌を無力化する。`;
-  } else if(triples.length > 0 && pLast2 < 30){
+  } else if(triples.length > 0 && pLast2 < PL.low){
     priority = `トリプルを軸に3枚縛りを仕掛ける。相手が対応できなければそのまま押し切る。`;
   } else {
     priority = `難しい手。相手が7以下を出した隙に8切りでリセットし、手番を確保しながら着実に枚数を削る。`;
