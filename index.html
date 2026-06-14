@@ -1401,7 +1401,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
 
   // ── 人数依存の閾値（基準=100/np）。3人戦の従来値を倍率で表現 ──
   const base = 100 / np;
-  const T_strong  = base * 1.50; // 3人→50
+  const T_strong  = base * 1.38; // 3人→46（実測の上位25%ライン付近）
   const T_vstrong = base * 1.80; // 3人→60
   const T_mid     = base * 0.90; // 3人→30
   const T_lowmid  = base * 1.05; // 3人→35
@@ -1594,8 +1594,9 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
   // ── 確率の解釈ガイド ──
   const kb=document.createElement('div'); kb.className='abox'; kb.style.animationDelay='.14s';
   let kh=`<div class="atitle">確率の読み方</div>`;
-  if(p1>=T_vstrong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は強い手札。ただし大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
-  else if(p1>=T_lowmid) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は標準的な手札の強さ。大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
+  if(p1>=T_vstrong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は非常に強い手札（上位1割クラス）。ただし大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
+  else if(p1>=T_strong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は上位圏の好手（平均30%前後を大きく上回る）。<strong>受け身にならず1位を取りにいける</strong>強さ。ただし毎回1位になれるわけではないので傾向の目安として。</div>`;
+  else if(p1>=T_lowmid) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は標準的な手札の強さ（平均は30%前後）。大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
   else kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は苦しい手。最下位確率が<strong>${pLast}%</strong>あることも念頭に置く。リスクを取って攻めるか、確実に中位を守るかの判断が問われる局面。</div>`;
   kb.innerHTML=kh; adv.appendChild(kb);
 }
@@ -1649,9 +1650,11 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   // 3人戦の従来値（50/55/40/35/30）を base=33.3 基準の倍率で表現し、
   // 4人・5人戦でも同じ相対感覚で判定できるようにする。
   const base = 100 / np;
+  // 実測分布での較正（3人戦）：1位率の中央値≈31%、上位25%≈47%、上位10%≈60%。
+  // = base*0.92 / base*1.41 / base*1.81。これに合わせて閾値を設定。
   const TH = {
     vstrong: base * 1.65, // 3人→55
-    strong:  base * 1.50, // 3人→50
+    strong:  base * 1.38, // 3人→46（実測の上位25%ライン付近）
     good:    base * 1.20, // 3人→40
     lowmid:  base * 1.05, // 3人→35
     mid:     base * 0.90, // 3人→30
@@ -1661,6 +1664,14 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
     high: base * 1.05,    // 3人→35
     low:  base * 0.90,    // 3人→30
   };
+  // ── 手札の総合的な強さ判定（1位率を実測分布で較正してラベル化）──
+  const verdict =
+    p1 >= base * 1.80 ? { t:'非常に強い手', c:'var(--green)', s:'上位1割クラス' } :
+    p1 >= base * 1.38 ? { t:'強い手',       c:'var(--green)', s:'上位2〜3割の好手' } :
+    p1 >= base * 1.12 ? { t:'やや強い手',   c:'var(--acc)',   s:'平均より上' } :
+    p1 >= base * 0.85 ? { t:'平均的な手',   c:'var(--acc)',   s:'平均並み' } :
+    p1 >= base * 0.55 ? { t:'やや弱い手',   c:'var(--red)',   s:'平均より下' } :
+                        { t:'弱い手',       c:'var(--red)',   s:'下位クラス' };
   const defMode     = pLast2 >= PL.def;
   const weakSingles = singles.filter(n => n < 11).length;
   const allSingles  = singles.length;
@@ -1773,6 +1784,8 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
     priority = `<strong>${names} のバラ牌処理が最優先</strong>。手番効率が悪いまま終盤を迎えると出せなくなる。`;
   } else if(p1 >= TH.vstrong){
     priority = `手札は強い。強カードを温存しつつ中位手から丁寧に処理し、制圧する。`;
+  } else if(p1 >= TH.strong){
+    priority = `<strong>上位圏の好手</strong>。受け身にならず<strong>自分から場をリードして1位を取りにいく</strong>。8切りやトリプル・ペアで主導権を握る。`;
   } else if(p1 >= TH.lowmid){
     priority = `中程度の手。場の主導権を取れるタイミングを見極め、無駄な強カード消費を避ける。`;
   } else if(pairs.length >= 4 && weakSingles <= 2 && pLast2 < PL.low){
@@ -1787,7 +1800,9 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   const sumBox = document.createElement('div');
   sumBox.className = 'abox';
   sumBox.style.cssText = 'margin-bottom:10px;border-left:3px solid var(--acc);padding-left:14px';
-  sumBox.innerHTML = `<div class="atitle">この手札の最優先事項</div>
+  sumBox.innerHTML = `<div class="atitle">手札の強さ判定</div>
+    <div style="font-size:1.05rem;font-weight:700;color:${verdict.c};margin-bottom:2px">${verdict.t}<span style="font-size:0.78rem;font-weight:400;color:var(--txt3)">　${verdict.s}・1位率${p1}% / 最下位${pLast2}%</span></div>
+    <div class="atitle" style="margin-top:10px">この手札の最優先事項</div>
     <div style="font-size:0.93rem;color:var(--txt);line-height:1.8">${priority}</div>`;
   gp.appendChild(sumBox);
 
