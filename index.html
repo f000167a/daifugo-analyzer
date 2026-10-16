@@ -1464,7 +1464,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
 
   // ── 人数依存の閾値（基準=100/np）。3人戦の従来値を倍率で表現 ──
   const base = 100 / np;
-  const T_strong  = base * 1.38; // 3人→46（実測の上位25%ライン付近）
+  const T_strong  = base * 1.38; // 3人→46（表示分類用の従来閾値）
   const T_vstrong = base * 1.80; // 3人→60
   const T_mid     = base * 0.90; // 3人→30
   const T_lowmid  = base * 1.05; // 3人→35
@@ -1624,8 +1624,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   
   // 8切り
   if(has8){
-    if((hand[8]||0)>=2) tips.push({b:`8切り×${hand[8]}`,c:'',t:`8が${hand[8]}枚。<strong>8切りは7以下の場限定のリセット手</strong>。相手が低カードを出してきたタイミングにしか使えない。使える機会は限られるので温存しすぎず、手番を取り直したいときに積極的に切る。`});
-    else tips.push({b:'8切り',c:'',t:'<strong>7以下の場にしか出せない限定的なリセット手</strong>。使えるタイミングは少ないが、場を断ち切って手番を取り直せる。最後の1枚を8で出して上がることもできる。'});
+    tips.push({b:hand[8]>=2?`8切り×${hand[8]}`:'8切り',c:'',t:`<strong>場が空なら8を親出しできる</strong>。場に重ねるときは同じ枚数が必要で、通常時は3〜7${rRev?'、革命中は9・10・J・Q・K・A・2':''}の組に出せる。出すと場が流れ、<strong>手札が残っていれば自分の手番が続く</strong>。8で上がった場合は次の人の手番になる。`});
   }
   
   // テンポ（手番奪取）の弱点警告：2・JKRが無いのに見かけ上の強さがある手
@@ -1649,7 +1648,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   
   // 低カードのみ
   if(lowOnly>=total*0.7&&total>=6){
-    tips.push({b:'低カード多め',c:'r',t:`手札の${Math.round(lowOnly/total*100)}%が3〜7。<strong>終盤の制圧力が低い</strong>ため、序盤から積極的に多枚数出しで枚数を削る。8切りや革命があれば積極活用。`});
+    tips.push({b:'低カード多め',c:'r',t:`手札の${Math.round(lowOnly/total*100)}%が3〜7。<strong>終盤の制圧力が低い</strong>ため、序盤から積極的に多枚数出しで枚数を削る。${has8?'8切りも活用。':''}${rRev?'革命ができれば活用。':''}`});
   }
   
   // 枚数が少ない
@@ -1669,10 +1668,11 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   // ── 確率の解釈ガイド ──
   const kb=document.createElement('div'); kb.className='abox'; kb.style.animationDelay='.14s';
   let kh=`<div class="atitle">確率の読み方</div>`;
-  if(p1>=T_vstrong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は非常に強い手札（上位1割クラス）。ただし大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
-  else if(p1>=T_strong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は上位圏の好手（平均30%前後を大きく上回る）。<strong>受け身にならず1位を取りにいける</strong>強さ。ただし毎回1位になれるわけではないので傾向の目安として。</div>`;
-  else if(p1>=T_lowmid) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は標準的な手札の強さ（平均は30%前後）。大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
-  else kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は苦しい手。最下位確率が<strong>${pLast}%</strong>あることも念頭に置く。リスクを取って攻めるか、確実に中位を守るかの判断が問われる局面。</div>`;
+  kh+=`<div class="aitem">${np}人戦で全員の1位率が同じなら<strong>${Number(base.toFixed(1))}%</strong>（100÷${np}人）。これは均等な比較基準で、実際の手札分布の平均や上位何割かを示すものではない。表示確率と強さ判定は<strong>選択したルール・配札仮定・AIによるモデル内の目安</strong>で、実戦の勝率を保証しない。</div>`;
+  if(p1>=T_vstrong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は比較基準を大きく上回る。ただし大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
+  else if(p1>=T_strong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は比較基準を上回る。<strong>受け身にならず1位を取りにいく</strong>方針も考えられる。ただし毎回1位になれるわけではないので傾向の目安として。</div>`;
+  else if(p1>=T_lowmid) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は比較基準をやや上回る。大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
+  else kh+=`<div class="aitem">1位確率は<strong>${p1}%</strong>。最下位確率が<strong>${pLast}%</strong>あることも念頭に置く。リスクを取って攻めるか、確実に中位を守るかの判断が問われる局面。</div>`;
   kb.innerHTML=kh; adv.appendChild(kb);
 }
 
@@ -1686,6 +1686,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
 
   // 手札情報を整理
   const joker   = hand[16] || 0;
+  const canEightCut = r8 && (hand[8] || 0) > 0;
   const has2    = (hand[15] || 0);
   const hasA    = (hand[14] || 0);
   const hasK    = (hand[13] || 0);
@@ -1725,11 +1726,10 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   // 3人戦の従来値（50/55/40/35/30）を base=33.3 基準の倍率で表現し、
   // 4人・5人戦でも同じ相対感覚で判定できるようにする。
   const base = 100 / np;
-  // 実測分布での較正（3人戦）：1位率の中央値≈31%、上位25%≈47%、上位10%≈60%。
-  // = base*0.92 / base*1.41 / base*1.81。これに合わせて閾値を設定。
+  // 従来の表示・助言用閾値を維持する。手札分布の百分位を示すものではない。
   const TH = {
     vstrong: base * 1.65, // 3人→55
-    strong:  base * 1.38, // 3人→46（実測の上位25%ライン付近）
+    strong:  base * 1.38, // 3人→46
     good:    base * 1.20, // 3人→40
     lowmid:  base * 1.05, // 3人→35
     mid:     base * 0.90, // 3人→30
@@ -1739,14 +1739,14 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
     high: base * 1.05,    // 3人→35
     low:  base * 0.90,    // 3人→30
   };
-  // ── 手札の総合的な強さ判定（1位率を実測分布で較正してラベル化）──
+  // ── モデル内の1位率を均等な比較基準に対してラベル化 ──
   const verdict =
-    p1 >= base * 1.80 ? { t:'非常に強い手', c:'var(--green)', s:'上位1割クラス' } :
-    p1 >= base * 1.38 ? { t:'強い手',       c:'var(--green)', s:'上位2〜3割の好手' } :
-    p1 >= base * 1.12 ? { t:'やや強い手',   c:'var(--acc)',   s:'平均より上' } :
-    p1 >= base * 0.85 ? { t:'平均的な手',   c:'var(--acc)',   s:'平均並み' } :
-    p1 >= base * 0.55 ? { t:'やや弱い手',   c:'var(--red)',   s:'平均より下' } :
-                        { t:'弱い手',       c:'var(--red)',   s:'下位クラス' };
+    p1 >= base * 1.80 ? { t:'非常に強い手', c:'var(--green)', s:'比較基準を大きく上回る' } :
+    p1 >= base * 1.38 ? { t:'強い手',       c:'var(--green)', s:'比較基準を上回る' } :
+    p1 >= base * 1.12 ? { t:'やや強い手',   c:'var(--acc)',   s:'比較基準をやや上回る' } :
+    p1 >= base * 0.85 ? { t:'基準付近の手', c:'var(--acc)',   s:'比較基準に近い' } :
+    p1 >= base * 0.55 ? { t:'やや弱い手',   c:'var(--red)',   s:'比較基準を下回る' } :
+                        { t:'弱い手',       c:'var(--red)',   s:'比較基準を大きく下回る' };
   const defMode     = pLast2 >= PL.def;
   const weakSingles = singles.filter(n => n < 11).length;
   const allSingles  = singles.length;
@@ -1794,7 +1794,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
     paras.push(`中程度の手札（1位率${p1}%）。現状維持が基本。無理に富豪を狙わず、${triDesc ? triDesc+'のトリプルや' : ''}ペアを活かして手番を確保しながら枚数を削る。強カードは切り返し用に残す。`);
   } else {
     // 平民・弱手
-    paras.push(`苦しい手札（1位率${p1}%）。現状維持を目標に手番確保を優先する。${r8 && (hand[8]||0)>0 ? '相手が7以下を出したタイミングに8切りで手番を取り直しながら、' : ''}着実に枚数を削ることに集中する。`);
+    paras.push(`苦しい手札（1位率${p1}%）。現状維持を目標に手番確保を優先する。${canEightCut ? '親出しや同じ枚数で返せる場で8切りを使いながら、' : ''}着実に枚数を削ることに集中する。`);
   }
 
   // ── 段落2：手札固有の戦術ポイント ──
@@ -1833,7 +1833,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
 
   // ── 段落3：手番が取れない場合の対処 ──
   if(defMode || (!hasStrong && weakSingles >= 3)){
-    paras.push(`手番が回ってこない展開になりやすい。相手の場が切れたタイミング・8切り後・パスが続いた後を逃さず、弱いカードから積極的に出して枚数を減らす。`);
+    paras.push(`手番が回ってこない展開になりやすい。場が流れて自分が親になった機会を逃さず、弱いカードから積極的に出して枚数を減らす。`);
   }
 
   // ── 最優先事項 ──
@@ -1847,7 +1847,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   } else if(pLast2 >= PL.def){
     priority = `最下位転落リスクが高い（${pLast2}%）。1位より<strong>確実に手札を処理して上がりきること</strong>を優先する。`;
   } else if(pLast2 >= PL.high && p1 < TH.mid){
-    priority = `苦しい手。<strong>最下位回避を優先</strong>（最下位${pLast2}%）。相手が低カードを出した隙に8切りで手番を取り直しながら守る。`;
+    priority = `苦しい手。<strong>最下位回避を優先</strong>（最下位${pLast2}%）。${canEightCut?'親出しや同じ枚数で返せる場で8切りを使い、':''}手番を確保しながら守る。`;
   } else if(hasRevPlan && !hasStrong){
     // 2・JKRが無く革命候補がある＝テンポ札に乏しい革命依存型の手。
     // p1が高めでもそれは革命前提の数字なので、革命を主軸に据える。
@@ -1860,7 +1860,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   } else if(p1 >= TH.vstrong){
     priority = `手札は強い。強カードを温存しつつ中位手から丁寧に処理し、制圧する。`;
   } else if(p1 >= TH.strong){
-    priority = `<strong>上位圏の好手</strong>。受け身にならず<strong>自分から場をリードして1位を取りにいく</strong>。8切りやトリプル・ペアで主導権を握る。`;
+    priority = `<strong>上位圏の好手</strong>。受け身にならず<strong>自分から場をリードして1位を取りにいく</strong>。${canEightCut?'8切りや':''}トリプル・ペアで主導権を握る。`;
   } else if(p1 >= TH.lowmid){
     priority = `中程度の手。場の主導権を取れるタイミングを見極め、無駄な強カード消費を避ける。`;
   } else if(pairs.length >= 4 && weakSingles <= 2 && pLast2 < PL.low){
@@ -1868,14 +1868,14 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   } else if(triples.length > 0 && pLast2 < PL.low){
     priority = `トリプルを軸に3枚縛りを仕掛ける。相手が対応できなければそのまま押し切る。`;
   } else {
-    priority = `難しい手。相手が7以下を出した隙に8切りでリセットし、手番を確保しながら着実に枚数を削る。`;
+    priority = `難しい手。${canEightCut?'親出しや同じ枚数で返せる場で8切りを使い、':''}手番を確保しながら着実に枚数を削る。`;
   }
 
   // ── 描画 ──
   const sumBox = document.createElement('div');
   sumBox.className = 'abox';
   sumBox.style.cssText = 'margin-bottom:10px;border-left:3px solid var(--acc);padding-left:14px';
-  sumBox.innerHTML = `<div class="atitle">手札の強さ判定</div>
+  sumBox.innerHTML = `<div class="atitle">手札の強さ判定（モデル内の目安）</div>
     <div style="font-size:1.05rem;font-weight:700;color:${verdict.c};margin-bottom:2px">${verdict.t}<span style="font-size:0.78rem;font-weight:400;color:var(--txt3)">　${verdict.s}・1位率${p1}% / 最下位${pLast2}%</span></div>
     <div class="atitle" style="margin-top:10px">この手札の最優先事項</div>
     <div style="font-size:0.93rem;color:var(--txt);line-height:1.8">${priority}</div>`;

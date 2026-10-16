@@ -137,3 +137,68 @@ test('Real 2000-trial run completes with finite rates and an intact input snapsh
   for(const rate of rates) assert.ok(Number.isFinite(rate)&&rate>=0&&rate<=100);
   assert.ok(Math.abs(rates.reduce((a,b)=>a+b,0)-100)<=0.3);
 });
+
+// Inspect generated user-visible copy without relying on browser layout.
+function advice(u,{np=3,p1=20,pLast=20,hand={3:2,4:2,5:2,9:1},r8=true,rRev=true}={}){
+  const rates={1:p1,[np]:pLast};
+  u.app.renderAdv(rates,np,hand,r8,rRev,null,'平民0');
+  u.app.renderGamePlan(rates,np,hand,r8,rRev,'平民0');
+  const text=id=>u.nodes.get(id).children.map(node=>node.innerHTML).join('\n').replace(/<[^>]*>/g,'');
+  return {adv:text('adv'),plan:text('gameplan')};
+}
+
+for(const [np,baseline] of [[3,'33.3'],[4,'25'],[5,'20']]){
+  test(`Advice uses the ${np}-player uniform baseline without population-percentile claims`,()=>{
+    const u=ui(),base=100/np;
+    const cases=[
+      [0.4,'弱い手','比較基準を大きく下回る'],
+      [0.7,'やや弱い手','比較基準を下回る'],
+      [1.0,'基準付近の手','比較基準に近い'],
+      [1.2,'やや強い手','比較基準をやや上回る'],
+      [1.5,'強い手','比較基準を上回る'],
+      [1.9,'非常に強い手','比較基準を大きく上回る'],
+    ];
+    for(const [multiple,label,comparison] of cases){
+      const {adv,plan}=advice(u,{np,p1:base*multiple,pLast:base/2});
+      assert.ok(adv.includes(`${np}人戦で全員の1位率が同じなら${baseline}%（100÷${np}人）`));
+      assert.match(adv,/均等な比較基準/);
+      assert.match(adv,/実際の手札分布の平均や上位何割かを示すものではない/);
+      assert.match(adv,/選択したルール・配札仮定・AIによるモデル内の目安/);
+      assert.match(adv,/実戦の勝率を保証しない/);
+      assert.match(plan,/手札の強さ判定（モデル内の目安）/);
+      assert.ok(plan.includes(`${label}　${comparison}・1位率`));
+      assert.doesNotMatch(adv+plan,/平均(?:は)?30%|上位1割クラス|上位2〜3割の好手|平均並み|平均より/);
+    }
+  });
+}
+
+for(const rRev of [false,true]){
+  test(`Eight-cut copy describes lead, equal counts, finishing, and revolution=${rRev}`,()=>{
+    const u=ui();
+    for(const np of [3,4,5]) for(const count of [1,2,3,4]){
+      const {adv,plan}=advice(u,{np,rRev,hand:{3:2,4:2,5:2,8:count,16:1}});
+      assert.match(adv,/場が空なら8を親出しできる/);
+      assert.match(adv,/場に重ねるときは同じ枚数が必要/);
+      assert.match(adv,/通常時は3〜7/);
+      if(rRev) assert.match(adv,/革命中は9・10・J・Q・K・A・2/);
+      else assert.doesNotMatch(adv,/革命中は/);
+      assert.match(adv,/手札が残っていれば自分の手番が続く/);
+      assert.match(adv,/8で上がった場合は次の人の手番になる/);
+      assert.doesNotMatch(adv+plan,/7以下|低カードを出した隙|8切り後/);
+    }
+  });
+}
+
+test('Advice does not recommend eight-cut when disabled or when no eight is held',()=>{
+  const u=ui();
+  for(const np of [3,4,5]) for(const rRev of [false,true]){
+    for(const [r8,count] of [[false,0],[false,1],[false,2],[true,0]]){
+      // Covers default/strong priority, high-last-place priority, and defensive paragraph.
+      for(const [winMultiple,lastMultiple] of [[0.4,0.5],[0.8,1.1],[0.8,1.4],[1.0,0.5],[1.5,0.5],[1.9,0.5]]){
+        const {adv,plan}=advice(u,{np,r8,rRev,p1:100/np*winMultiple,pLast:100/np*lastMultiple,
+          hand:{3:2,4:2,5:2,8:count,9:1}});
+        assert.doesNotMatch(adv+plan,/8切り/);
+      }
+    }
+  }
+});
