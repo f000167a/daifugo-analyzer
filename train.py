@@ -36,7 +36,7 @@ from copy import deepcopy
 # ── 定数 ──────────────────────────────────────────────────────
 NUMS = list(range(3, 17))          # 3〜15 + 16(JKR)
 NR   = {n: i for i, n in enumerate(NUMS)}          # 通常ランク
-RR   = {n: i for i, n in enumerate([16] + list(reversed(NUMS[:-1])))}  # 革命ランク
+RR   = {n: i for i, n in enumerate(list(reversed(NUMS[:-1])) + [16])}  # 革命ランク
 
 def rk(n, rev):
     if n == 16:
@@ -141,17 +141,7 @@ def pick(hand, field, rev, opp, r_rev, W):
         if not cnt:
             continue
 
-        sizes = []
-        if field is not None:
-            sz   = field[1]
-            need = max(0, sz - cnt)
-            if need <= joker:
-                sizes.append((sz, need))
-        else:
-            for sz in range(1, cnt + 1):
-                sizes.append((sz, 0))
-            if r_rev and 2 <= cnt <= 3 and joker >= (4 - cnt):
-                sizes.append((4, 4 - cnt))
+        sizes = move_sizes(cnt, joker, field)
 
         for sz, j_used in sizes:
             if not cp_ok(num, sz, field, rev):
@@ -215,7 +205,7 @@ def pick(hand, field, rev, opp, r_rev, W):
 
             # ⑤ 革命
             if sz == 4 and r_rev:
-                ps = post_rev_str(hand, num, cnt - j_used, j_used, rev)
+                ps = post_rev_str(hand, num, sz - j_used, j_used, rev)
                 sc += (ps - 0.5) * 60  # 革命スコアは固定（学習対象外）
                 if j_used >= 2: sc -= 45
                 elif j_used == 1:
@@ -231,7 +221,7 @@ def pick(hand, field, rev, opp, r_rev, W):
             cands.append((sc, num, sz, j_used))
 
     # JKR単体
-    if joker > 0 and field is not None and field[1] == 1:
+    if joker > 0 and field is not None and cp_ok(16, 1, field, rev):
         nr = rk(16, rev) / MX
         sc = nr * 50
         if ultra:           sc += 45
@@ -249,27 +239,40 @@ def pick(hand, field, rev, opp, r_rev, W):
     cands.sort(key=lambda x: -x[0])
     return cands[0][1], cands[0][2], cands[0][3]
 
+def move_sizes(count, joker, field):
+    sizes = [field[1]] if field else range(1, min(4, count + joker) + 1)
+    return [(size, max(0, size - count)) for size in sizes
+            if max(0, size - count) <= joker]
+
+
+def deal_hands(p_hand, np_):
+    if np_ not in (3, 4, 5):
+        raise ValueError("Player count must be 3, 4, or 5")
+    for n, count in p_hand.items():
+        if n not in NUMS or not isinstance(count, int) or not 0 <= count <= (2 if n == 16 else 4):
+            raise ValueError("Invalid card count")
+    base = 54 // np_
+    if hand_sum(p_hand) not in {base, (54 + np_ - 1) // np_}:
+        raise ValueError("Invalid initial hand size")
+    un = [n for n in NUMS for _ in range((2 if n == 16 else 4) - p_hand.get(n, 0))]
+    random.shuffle(un)
+    sizes = [base + (i < len(un) - base * (np_ - 1)) for i in range(np_ - 1)]
+    random.shuffle(sizes)
+    players = [{n: p_hand.get(n, 0) for n in NUMS}]
+    start = 0
+    for size in sizes:
+        hand = {n: 0 for n in NUMS}
+        for card in un[start:start + size]:
+            hand[card] += 1
+        players.append(hand)
+        start += size
+    return players
+
+
 # ── 1試合シミュレーション ─────────────────────────────────────
 def sim_once(p_hand, np_, r8, r_rev, W):
     """W: 学習対象の係数ベクトル（pid=0のみ使用）"""
-    full = [n for n in range(3, 16) for _ in range(4)] + [16, 16]
-    un   = list(full)
-    for n in NUMS:
-        c = p_hand.get(n, 0)
-        for _ in range(c):
-            un.remove(n)
-    random.shuffle(un)
-
-    others = np_ - 1
-    per_p  = len(un) // others
-    players = [dict(p_hand)]
-    for i in range(others):
-        h     = {n: 0 for n in NUMS}
-        start = i * per_p
-        end   = len(un) if i == others - 1 else start + per_p
-        for c in un[start:end]:
-            h[c] += 1
-        players.append(h)
+    players = deal_hands(p_hand, np_)
 
     active = list(range(np_))
     rnk    = []
@@ -290,6 +293,8 @@ def sim_once(p_hand, np_, r8, r_rev, W):
         play  = pick(h, field, rev, opp, r_rev, w_use)
 
         if play is None:
+            if field is None:
+                raise RuntimeError("No move on an empty table")
             cp += 1
             if cp >= len(active) - 1 and field:
                 field = None
@@ -327,6 +332,8 @@ def sim_once(p_hand, np_, r8, r_rev, W):
             continue
         cur = (cur + 1) % len(active)
 
+    if len(active) > 1:
+        raise RuntimeError("Game did not finish within the turn limit")
     for p in active:
         if p not in rnk:
             rnk.append(p)

@@ -209,6 +209,7 @@ input[type=range]::-webkit-slider-thumb {
   color: var(--txt2); cursor: pointer; transition: all .15s;
   display: flex; align-items: center; gap: 5px; white-space: nowrap;
 }
+#cancelBtn[hidden] { display: none; }
 .rand-btn:hover { background: var(--acc-lt); border-color: var(--acc-md); color: var(--acc-dk); }
 
 /* ── 実行ボタン ── */
@@ -409,6 +410,8 @@ input[type=range]::-webkit-slider-thumb {
     <div class="spin" id="spin"></div>
     <span id="runL">分析する</span>
   </button>
+  <button class="rand-btn" id="cancelBtn" onclick="cancelRun()" hidden style="margin-top:10px">計算を中止</button>
+  <div id="runStatus" role="status" aria-live="polite" style="font-size:0.82rem;color:var(--txt2);margin-top:8px"></div>
 
   <!-- 結果 -->
   <div id="result" style="margin-top:24px">
@@ -418,6 +421,7 @@ input[type=range]::-webkit-slider-thumb {
     </div>
     <div class="rboxes" id="rboxes"></div>
     <div class="bars" id="bars"></div>
+    <p id="modelNote" style="font-size:0.8rem;color:var(--txt2);margin-top:12px"></p>
     <hr class="dvdr">
     <div id="adv"></div>
   </div>
@@ -437,7 +441,7 @@ input[type=range]::-webkit-slider-thumb {
 // ── 定数 ──────────────────────────────────────────────
 const NUMS = [3,4,5,6,7,8,9,10,11,12,13,14,15,16];
 const NR   = Object.fromEntries(NUMS.map((n,i)=>[n,i]));
-const RR   = Object.fromEntries([16,...NUMS.slice(0,-1).reverse()].map((n,i)=>[n,i]));
+const RR   = Object.fromEntries([...NUMS.slice(0,-1).reverse(),16].map((n,i)=>[n,i]));
 const D    = {3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',
               11:'J',12:'Q',13:'K',14:'A',15:'2',16:'JKR'};
 const CDEFS= [
@@ -605,12 +609,14 @@ function buildGrid(){
   }
 }
 function chg(n,d,max){
+  invalidateResult();
   HC[n] = Math.max(0,Math.min(max,HC[n]+d));
   const el = document.getElementById('sv'+n);
   el.textContent = HC[n]; el.className = 'sv'+(HC[n]?' v'+HC[n]:'');
   updPrev();
 }
 function setHand(hand){
+  invalidateResult();
   for(const n of NUMS){
     HC[n] = hand[n]||0;
     const el = document.getElementById('sv'+n);
@@ -646,10 +652,8 @@ function randHand(){
     const j=Math.floor(Math.random()*(i+1));
     [deck[i],deck[j]]=[deck[j],deck[i]];
   }
-  const base  = Math.floor(54/np);
-  const extra = 54 % np;
-  // 端数がある場合はbase or base+1 をランダムに選択
-  const myCount = extra === 0 ? base : (Math.random() < extra/np ? base+1 : base);
+  // 入力中の枚数選択を尊重する。
+  const myCount = selectedHandCount(np);
   const hand = Object.fromEntries(NUMS.map(n=>[n,0]));
   for(let i=0;i<myCount;i++) hand[deck[i]]++;
   setHand(hand);
@@ -657,9 +661,48 @@ function randHand(){
 
 
 // ── モンテカルロ（都落ち・非同期分割版） ───────────────────
-function shuf(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a; }
+function shuf(a,rng=Math.random){ for(let i=a.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a; }
+function handSum(hand){ return NUMS.reduce((s,n)=>s+(hand[n]||0),0); }
+function selectedHandCount(np){
+  return 54%np === 0 ? 54/np : +document.getElementById('handCount').value;
+}
+function validateHand(hand,np,expected){
+  if(![3,4,5].includes(np)) throw new Error('人数は3〜5人から選んでください');
+  for(const [n,c] of Object.entries(hand)){
+    if(!NUMS.includes(+n) || !Number.isInteger(c) || c<0 || c>(+n===16?2:4)){
+      throw new Error('手札は各数字0〜4枚、JKRは0〜2枚の整数で入力してください');
+    }
+  }
+  const total=handSum(hand), base=Math.floor(54/np);
+  if(total<base || total>Math.ceil(54/np) || (expected!==undefined && total!==expected)){
+    throw new Error(`手札は${expected===undefined ? (54%np ? `${base}か${base+1}` : base) : expected}枚にしてください（現在${total}枚）`);
+  }
+}
+function dealHands(hand,np,rng=Math.random){
+  validateHand(hand,np);
+  const un=[];
+  for(const n of NUMS) for(let i=hand[n]||0;i<(n===16?2:4);i++) un.push(n);
+  shuf(un,rng);
+  const others=np-1, base=Math.floor(54/np);
+  // 余りは別々の相手に1枚ずつ。席による枚数の偏りも固定しない。
+  const sizes=shuf(Array.from({length:others},(_,i)=>base+(i<un.length-base*others?1:0)),rng);
+  const players=[Object.fromEntries(NUMS.map(n=>[n,hand[n]||0]))];
+  let start=0;
+  for(const size of sizes){
+    const h=Object.fromEntries(NUMS.map(n=>[n,0]));
+    for(const n of un.slice(start,start+size)) h[n]++;
+    start+=size;
+    players.push(h);
+  }
+  return players;
+}
 // cpOk: num×sz が場に出せるか（JKR補完済みのnumで判定）
 function cpOk(n,sz,f,rev){ if(!f)return true; return sz===f[1]&&rk(n,rev)>rk(f[0],rev); }
+// JKRは場の有無によらず同じ数字の2〜4枚組を補完できる。
+function moveSizes(count,joker,field){
+  const sizes=field ? [field[1]] : Array.from({length:Math.min(4,count+joker)},(_,i)=>i+1);
+  return sizes.map(sz=>({sz,jUsed:Math.max(0,sz-count)})).filter(m=>m.jUsed<=joker);
+}
 function avgRevRk(hand,used,nr){
   const v=[];
   for(const n of NUMS){ const c=hand[n]||0; if(!c||n===used)continue; for(let i=0;i<c;i++)v.push(rk(n,nr)); }
@@ -739,15 +782,7 @@ function pick(hand,field,rev,opp,rRev){
     if(num===16) continue;
     const cnt=hand[num]||0; if(!cnt) continue;
 
-    const sizes=[];
-    if(field){
-      const sz=field[1];
-      const need=Math.max(0,sz-cnt);
-      if(need<=joker) sizes.push({sz,jUsed:need});
-    } else {
-      for(let sz=1;sz<=cnt;sz++) sizes.push({sz,jUsed:0});
-      if(rRev&&cnt>=2&&cnt<=3&&joker>=(4-cnt)) sizes.push({sz:4,jUsed:4-cnt});
-    }
+    const sizes=moveSizes(cnt,joker,field);
 
     for(const {sz,jUsed} of sizes){
       if(!cpOk(num,sz,field,rev)) continue;
@@ -805,7 +840,7 @@ function pick(hand,field,rev,opp,rRev){
 
       // ── ⑤ 革命スコア ──
       if(sz===4&&rRev){
-        const ps=postRevStr(num,cnt-jUsed,jUsed);
+        const ps=postRevStr(num,sz-jUsed,jUsed);
         if(ps>=0.5){ sc+=(ps-0.5)*60; }
         else { sc-=(0.5-ps)*60; }
         if(jUsed>=2) sc-=45;
@@ -842,7 +877,7 @@ function pick(hand,field,rev,opp,rRev){
   }
 
   // JKR単体出し
-  if(joker>0&&field&&field[1]===1){
+  if(joker>0&&field&&cpOk(16,1,field,rev)){
     const nr=rk(16,rev)/mx; let sc=nr*50;
     if(tot===1) sc+=500; // JKR1枚のみ→即上がり
     else if(ultraLate) sc+=45;
@@ -876,7 +911,9 @@ function pick(hand,field,rev,opp,rRev){
 
 // ── MCTS手選択 ────────────────────────────────────────
 // 自分(pid=0)の手番で合法手ごとにN回ロールアウトし、期待着順最小の手を返す
-const MCTS_ROLLOUTS = 30; // 1手あたりのロールアウト数
+// 配布済みの完全情報局面をpick()で展開するため、同じ手の反復はすべて同じ結果。
+// 30回の同一計算を1回にしても選択結果は変わらない（無作為探索ではない）。
+const MCTS_ROLLOUTS = 1;
 
 function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn, startCur){
   // 現在の局面から全員がpick()でプレイした場合の自分の着順を返す
@@ -897,6 +934,7 @@ function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn, sta
     const opp = active.filter(j=>j!==pid).map(j=>sum(plCopy[j]));
     const play = pick(h, fld, rv, opp, rRev);
     if(!play){
+      if(!fld) throw new Error('場が空の状態で出せる手がありません');
       cpass++;
       if(cpass >= active.length-1 && fld){ fld=null; cpass=0; }
       cur = (cur+1) % active.length;
@@ -923,6 +961,7 @@ function mctsRollout(players, myIdx, np, r8, rRev, field, rev, cp, activeIn, sta
     }
     cur = (cur+1) % active.length;
   }
+  if(active.length>1) throw new Error('試合が規定手番内に終了しませんでした');
   for(const p of active) if(!rnk.includes(p)) rnk.push(p);
   return rnk.indexOf(myIdx) + 1;
 }
@@ -941,16 +980,12 @@ function mctsPick(hand, field, rev, opp, rRev, r8, np, players, myIdx, cp, activ
   for(const num of NUMS){
     if(num===16) continue;
     const cnt = hand[num]||0; if(!cnt) continue;
-    if(field){
-      const sz=field[1], need=Math.max(0,sz-cnt);
-      if(need<=joker && cpOk(num,sz,field,rev)) candMoves.push({num,sz,jUsed:need});
-    } else {
-      for(let sz=1;sz<=cnt;sz++) candMoves.push({num,sz,jUsed:0});
-      if(rRev&&cnt>=2&&cnt<=3&&joker>=(4-cnt)) candMoves.push({num,sz:4,jUsed:4-cnt});
+    for(const {sz,jUsed} of moveSizes(cnt,joker,field)){
+      if(cpOk(num,sz,field,rev)) candMoves.push({num,sz,jUsed});
     }
   }
   // JKR単体出し
-  if(joker>0&&field&&field[1]===1) candMoves.push({num:16,sz:1,jUsed:0});
+  if(joker>0&&field&&cpOk(16,1,field,rev)) candMoves.push({num:16,sz:1,jUsed:0});
   else if(joker>0&&!field&&ultraLate&&tot<=2) candMoves.push({num:16,sz:1,jUsed:0});
 
   // パスも候補に（場がある場合のみ）
@@ -980,6 +1015,7 @@ function mctsPick(hand, field, rev, opp, rRev, r8, np, players, myIdx, cp, activ
         if(cpass >= activeIn2.length-1 && fld){ fld=null; cpass=0; }
       } else {
         const {num,sz,jUsed} = move;
+        cpass=0; // 新しい出し手が現れたので、それまでの連続パスは無効。
         if(num===16){ myH[16]-=sz; }
         else{ myH[num]-=sz-jUsed; myH[16]-=(jUsed||0); }
         fld=[num,sz];
@@ -1018,25 +1054,11 @@ function mctsPick(hand, field, rev, opp, rRev, r8, np, players, myIdx, cp, activ
   return [best.num, best.sz, best.jUsed];
 }
 
-function simOnce(pH,np,r8,rRev,myPos,useMCTS){
-  const full=[]; for(let n=3;n<=15;n++)for(let i=0;i<4;i++)full.push(n); full.push(16,16);
-  const un=[...full];
-  for(const n of NUMS){ const c=pH[n]||0; for(let i=0;i<c;i++){const idx=un.indexOf(n);if(idx!==-1)un.splice(idx,1);} }
-  shuf(un);
-  // 余りカードを最後のプレイヤーへ均等分配（端数処理修正）
-  const others = np-1;
-  const perP = Math.floor(un.length/others);
-  const players=[{...pH}];
-  for(let i=0;i<others;i++){
-    const h=Object.fromEntries(NUMS.map(n=>[n,0]));
-    const start=i*perP;
-    const end = i===others-1 ? un.length : start+perP;
-    for(const c of un.slice(start,end))h[c]++;
-    players.push(h);
-  }
+function simOnce(pH,np,r8,rRev,myPos,useMCTS,rng=Math.random,onTurn=null){
+  const players=dealHands(pH,np,rng);
   const active=Array.from({length:np},(_,i)=>i);
   const rnk=[]; let field=null,rev=false,cp=0,turn=0;
-  let cur = Math.floor(Math.random() * np);
+  let cur = Math.floor(rng() * np);
 
   const sum=h=>NUMS.reduce((s,n)=>s+(h[n]||0),0);
   while(active.length>1&&turn<1500){
@@ -1047,7 +1069,11 @@ function simOnce(pH,np,r8,rRev,myPos,useMCTS){
     const play = (useMCTS && pid===0)
       ? mctsPick(h, field, rev, opp, rRev, r8, np, players, pid, cp, [...active])
       : pick(h, field, rev, opp, rRev);
+    // テスト用の任意フック。通常実行ではスナップショットを作らない。
+    if(onTurn) onTurn({pid,play:play&&[...play],field:field&&[...field],rev,
+      players:players.map(h=>({...h})),active:[...active],ranks:[...rnk],turn});
     if(!play){ 
+      if(!field) throw new Error('場が空の状態で出せる手がありません');
       cp++; 
       if(cp>=active.length-1&&field){field=null;cp=0;} 
       cur=(cur+1)%active.length; 
@@ -1075,21 +1101,16 @@ function simOnce(pH,np,r8,rRev,myPos,useMCTS){
     }
     cur=(cur+1)%active.length;
   }
+  if(active.length>1) throw new Error('試合が規定手番内に終了しませんでした');
   for(const p of active) if(!rnk.includes(p)) rnk.push(p);
+  if(onTurn) onTurn({finished:true,players:players.map(h=>({...h})),ranks:[...rnk],turn});
 
   // 自分（pid=0）の着順を返す（1始まり）
   let myRank = rnk.indexOf(0)+1;
   
   // 都落ちルール：富豪が1位以外→最下位
   if(myPos === '富豪' && myRank !== 1) myRank = np;
-  // 平民（2回目以降）のみ：pid=1が前回富豪と仮定し、都落ちで順位繰り上がり
-  else if(myPos === '貧民' || myPos === '平民') {
-    const rivalRank = rnk.indexOf(1)+1;
-    if(rivalRank !== 1 && rivalRank < myRank) {
-      myRank = Math.max(1, myRank-1);
-    }
-  }
-  // 平民0（初戦）は都落ちなし・補正なし → myRankそのまま
+  // 相手の役職は入力されていないため仮定しない。他の役職は着順そのまま。
   
   return myRank;
 }
@@ -1244,61 +1265,102 @@ function _revScore(hand, revNum, jUsed, joker, two, ace){
 // MCTSモード時は試行数を減らす（1試行あたり手番数xROLLOUT倍のコスト）
 const TRIALS_NORMAL = 2000;
 const TRIALS_MCTS   = 150;
+let activeRun=null;
+let progressReset=null;
+function idleRunUI(){
+  document.getElementById('runBtn').disabled=false;
+  document.getElementById('spin').style.display='none';
+  document.getElementById('runL').textContent='分析する';
+  document.getElementById('cancelBtn').hidden=true;
+}
+function cancelRun(showMessage=true){
+  if(!activeRun) return;
+  clearTimeout(activeRun.timer);
+  activeRun=null;
+  idleRunUI();
+  document.getElementById('pbar').style.width='0%';
+  if(showMessage) document.getElementById('runStatus').textContent='計算を中止しました。';
+}
+function invalidateResult(){
+  const hadResult=!!activeRun || document.getElementById('result').style.display==='block';
+  cancelRun(false);
+  clearTimeout(progressReset);
+  document.getElementById('pbar').style.width='0%';
+  document.getElementById('result').style.display='none';
+  document.getElementById('gameplan').style.display='none';
+  document.getElementById('gameplanEmpty').style.display='block';
+  document.getElementById('runStatus').textContent=hadResult?'入力が変わりました。もう一度分析してください。':'';
+}
 function run(){
-  const tot=NUMS.reduce((s,n)=>s+HC[n],0);
-  if(!tot){ alert('手札を入力してください'); return; }
+  if(activeRun) return; // 二重実行を防止
   const np=+document.getElementById('numP').value;
+  const hand={...HC};
+  const status=document.getElementById('runStatus');
+  try { validateHand(hand,np,selectedHandCount(np)); }
+  catch(error){ status.textContent=error.message; return; }
   const r8=document.getElementById('r8').checked;
   const rRev=document.getElementById('rRev').checked;
   const myPos=document.getElementById('myPos').value;
   const useMCTS=document.getElementById('rMCTS').checked;
-  const TRIALS = useMCTS ? TRIALS_MCTS : TRIALS_NORMAL;
-  const btn=document.getElementById('runBtn');
-  const spin=document.getElementById('spin');
-
-  btn.disabled=true; spin.style.display='block';
+  const trials=useMCTS ? TRIALS_MCTS : TRIALS_NORMAL;
+  invalidateResult();
+  const job={timer:null};
+  activeRun=job;
+  document.getElementById('runBtn').disabled=true;
+  document.getElementById('spin').style.display='block';
   document.getElementById('runL').textContent='計算中...';
-
+  document.getElementById('cancelBtn').hidden=false;
   const bar=document.getElementById('pbar');
-  bar.style.width='0%';
-  const hand={...HC};
-
   let done=0;
   const cnt=Object.fromEntries(Array.from({length:np},(_,i)=>[i+1,0]));
-  const chunkSize = useMCTS ? 5 : 50;
+  status.textContent=`計算中 0 / ${trials}試行`;
   function doChunk(){
-    for(let i=0;i<chunkSize&&done<TRIALS;i++){
-      cnt[simOnce(hand,np,r8,rRev,myPos,useMCTS)]++;
-      done++;
+    if(activeRun!==job) return;
+    try {
+      // 12msを目安に試行の区切りで描画・中止・入力へ制御を返す。1試行内は中断しない。
+      const started=performance.now();
+      do {
+        cnt[simOnce(hand,np,r8,rRev,myPos,useMCTS)]++;
+        done++;
+      } while(done<trials && performance.now()-started<12);
+      bar.style.width=(done/trials*100)+'%';
+      status.textContent=`計算中 ${done} / ${trials}試行`;
+      if(done<trials){ job.timer=setTimeout(doChunk,0); return; }
+      const rates=Object.fromEntries(Object.entries(cnt).map(([k,v])=>[+k,Math.round(v/trials*1000)/10]));
+      const evalResult=evaluateHand(hand,r8,rRev);
+      render(rates,np,r8,rRev,hand,evalResult,useMCTS,trials,myPos);
+      SIM_LOG.push({
+        timestamp:new Date().toISOString(),
+        config:{np,r8,rRev,myPos,useMCTS,trials},
+        features:handToFeatures(hand),rates,
+        evalScore:evalResult.score,evalRaw:evalResult.raw,
+      });
+      updateSimLogUI();
+      activeRun=null;
+      idleRunUI();
+      status.textContent=`${trials.toLocaleString()}試行の計算が完了しました。`;
+      progressReset=setTimeout(()=>{ bar.style.width='0%'; },600);
+    } catch(error){
+      cancelRun(false);
+      document.getElementById('result').style.display='none';
+      document.getElementById('gameplan').style.display='none';
+      document.getElementById('gameplanEmpty').style.display='block';
+      status.textContent=`計算できませんでした: ${error.message}。入力を確認して再実行してください。`;
     }
-    bar.style.width=(done/TRIALS*100)+'%';
-    if(done<TRIALS){ setTimeout(doChunk,0); return; }
-    const rates=Object.fromEntries(Object.entries(cnt).map(([k,v])=>[+k,Math.round(v/TRIALS*1000)/10]));
-    setTimeout(()=>{ bar.style.width='0'; },600);
-    btn.disabled=false; spin.style.display='none';
-    document.getElementById('runL').textContent='分析する';
-    const evalResult = evaluateHand(hand, r8, rRev);
-
-    // ── シミュレーション結果をログに追記 ──
-    SIM_LOG.push({
-      timestamp : new Date().toISOString(),
-      config    : { np, r8, rRev, useMCTS, trials: TRIALS },
-      features  : handToFeatures(hand),
-      rates,          // {1: 40.7, 2: 35.0, 3: 24.3}
-      evalScore : evalResult.score,
-      evalRaw   : evalResult.raw,
-    });
-    updateSimLogUI();
-
-    render(rates,np,r8,rRev,hand,evalResult,useMCTS,TRIALS);
   }
-  doChunk();
+  job.timer=setTimeout(doChunk,0);
 }
-   
+for(const id of ['numP','myPos','handCount','r8','rRev','rMCTS']){
+  document.getElementById(id).addEventListener('change',invalidateResult);
+}
+
 // ── 描画 ─────────────────────────────────────────────
-function render(rates,np,r8,rRev,hand,evalResult,useMCTS,trials){
+function render(rates,np,r8,rRev,hand,evalResult,useMCTS,trials,myPos){
   const names=RNAMES[np];
-  document.getElementById('modeChip').textContent = '';
+  document.getElementById('modeChip').textContent = `${np}人・${handSum(hand)}枚・${myPos==='平民0'?'初戦':myPos}・${trials.toLocaleString()}試行`;
+  document.getElementById('modelNote').textContent = 'この数値は簡略ルールと固定AIによるモデル内の推定です。実際の対人勝率を保証しません。' +
+    (useMCTS ? '強化モードは相手の手札も参照する実験用の探索です。' : '全員が同じAIでプレイします。') +
+    ` 試行のばらつきの目安は最大約±${(1.96*Math.sqrt(0.25/trials)*100).toFixed(1)}ポイント（95%・各順位別の近似）。AIやルールの妥当性を示す範囲ではありません。割合は丸めにより合計100%にならないことがあります。`;
 
   // rank boxes：富豪・平民（中位まとめ）・貧民の3区分
   const rb=document.getElementById('rboxes'); rb.innerHTML='';
@@ -1338,13 +1400,13 @@ function render(rates,np,r8,rRev,hand,evalResult,useMCTS,trials){
   }
   setTimeout(()=>document.querySelectorAll('.bfill[data-w]').forEach(el=>{ el.style.width=el.dataset.w+'%'; }),80);
 
-  renderAdv(rates,np,hand,r8,rRev,evalResult);
-  renderGamePlan(rates,np,hand,r8,rRev);
+  renderAdv(rates,np,hand,r8,rRev,evalResult,myPos);
+  renderGamePlan(rates,np,hand,r8,rRev,myPos);
   const el=document.getElementById('result'); el.style.display='block';
   el.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
-function renderAdv(rates,np,hand,r8,rRev,evalResult){
+function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   const adv=document.getElementById('adv'); adv.innerHTML='';
 
   // ── ルールベース手札評価スコア表示（非表示中） ──
@@ -1384,7 +1446,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
     `;
     adv.appendChild(evalBox);
   }
-  const pos=document.getElementById('myPos').value;
+
   const fours=NUMS.filter(n=>n!==16&&(hand[n]||0)>=4);
   const triples=NUMS.filter(n=>n!==16&&(hand[n]||0)===3);
   const pairs=NUMS.filter(n=>(hand[n]||0)>=2).length;
@@ -1615,7 +1677,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult){
 }
 
 // ── 戦術指南 ────────────────────────────────────────────
-function renderGamePlan(rates, np, hand, r8, rRev) {
+function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   const gp = document.getElementById('gameplan');
   const empty = document.getElementById('gameplanEmpty');
   gp.style.display = 'block';
@@ -1657,7 +1719,7 @@ function renderGamePlan(rates, np, hand, r8, rRev) {
   // ── 戦略文生成（役職×手札強さのマトリクス） ──
   const p1     = rates[1];
   const pLast2 = rates[np];
-  const pos    = document.getElementById('myPos').value;
+
   const doraku = 100 - p1;
   // ── 人数依存の強さ閾値（基準1位率=100/np に対する相対値）──
   // 3人戦の従来値（50/55/40/35/30）を base=33.3 基準の倍率で表現し、
