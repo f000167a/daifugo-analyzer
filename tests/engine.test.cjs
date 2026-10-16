@@ -213,3 +213,36 @@ for(const [np,size] of [[4,13],[5,11]]) {
     assert.equal(sizes.reduce((a,b)=>a+b,0),54);
   });
 }
+
+for(const rev of [false,true]){
+  test(`Advice legality: equal ranks, including 2-on-2, cannot overcall; revolution=${rev}`,()=>{
+    for(let rank=3;rank<=16;rank++) for(let size=1;size<=4;size++){
+      assert.equal(app.cpOk(rank,size,[rank,size],rev),false);
+    }
+    for(let size=1;size<=4;size++){
+      const mine=hand(Array(size).fill(15));
+      assert.equal(app.pick(mine,[15,size],rev,[3,3],true),null);
+      assert.equal(app.mctsPick(mine,[15,size],rev,[3,3],true,true,3,
+        [mine,hand([3,4,5]),hand([6,7,8])],0,0,[0,1,2]),null);
+    }
+  });
+
+  test(`Advice legality: triples may respond to weaker triples but not pairs; revolution=${rev}`,()=>{
+    const mine=hand([7,7,7]), weaker=rev?8:6;
+    assert.deepEqual(plain(app.pick(mine,[weaker,3],rev,[3,3],true)),[7,3,0]);
+    assert.equal(app.pick(mine,[7,3],rev,[3,3],true),null);
+    // A response to a pair must be a pair, not the entire triple.
+    const pairResponse=app.pick(mine,[weaker,2],rev,[3,3],true);
+    if(pairResponse) assert.equal(pairResponse[1],2);
+  });
+
+  test(`Advice legality: jokers need a natural rank for groups and retain its strength; revolution=${rev}`,()=>{
+    const jokers=hand([16,16]), weaker=rev?8:6;
+    assert.equal(app.pick(jokers,[7,2],rev,[3,3],true),null);
+    assert.equal(app.mctsPick(jokers,[7,2],rev,[3,3],true,true,3,
+      [jokers,hand([3,4,5]),hand([6,7,8])],0,0,[0,1,2]),null);
+    assert.deepEqual(plain(app.pick(jokers,null,rev,[3,3],true)),[16,1,0]);
+    assert.equal(app.pick(hand([7,16]),[7,2],rev,[3,3],true),null);
+    assert.deepEqual(plain(app.pick(hand([7,16]),[weaker,2],rev,[3,3],true)),[7,2,1]);
+  });
+}
