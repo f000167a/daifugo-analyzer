@@ -1449,8 +1449,8 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
 
   const fours=NUMS.filter(n=>n!==16&&(hand[n]||0)>=4);
   const triples=NUMS.filter(n=>n!==16&&(hand[n]||0)===3);
-  const pairs=NUMS.filter(n=>(hand[n]||0)>=2).length;
-  const pairNums=NUMS.filter(n=>(hand[n]||0)>=2);
+  const pairs=NUMS.filter(n=>n!==16&&(hand[n]||0)>=2).length;
+  const pairNums=NUMS.filter(n=>n!==16&&(hand[n]||0)>=2);
   const high=NUMS.filter(n=>n>=14).reduce((s,n)=>s+(hand[n]||0),0); // A,2,JKR合計
   const has2=(hand[15]||0)>0;
   const hasA=(hand[14]||0)>0;
@@ -1464,7 +1464,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
 
   // ── 人数依存の閾値（基準=100/np）。3人戦の従来値を倍率で表現 ──
   const base = 100 / np;
-  const T_strong  = base * 1.38; // 3人→46（実測の上位25%ライン付近）
+  const T_strong  = base * 1.38; // 3人→46（表示分類用の従来閾値）
   const T_vstrong = base * 1.80; // 3人→60
   const T_mid     = base * 0.90; // 3人→30
   const T_lowmid  = base * 1.05; // 3人→35
@@ -1570,14 +1570,16 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   if(rRev&&fours.length){
     const fn=fours.map(n=>D[n]).join('・');
     const noTempo = !has2 && joker===0; // 2・JKRが無い＝テンポ札に乏しい
-    if(fours.some(n=>n<=6)){
-      tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${fn}は低い数字</strong>での革命。革命後の強弱逆転で自分の残り手が一気に強くなる可能性大。相手の油断を突いて一気に出す。`});
+    const lowFours=fours.filter(n=>n<=6);
+    if(lowFours.length){
+      const lowNames=lowFours.map(n=>D[n]).join('・');
+      tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${lowNames}は低い数字</strong>での革命。革命後の強弱逆転で自分の残り手が一気に強くなる可能性大。相手の油断を突いて一気に出す。`});
     } else if(noTempo){
-      tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${fn}の4枚組で革命</strong>。2・JKRが無いこの手では革命が主戦略。${fn}を4枚すべて握っているので相手に同じ数字で革命返しされず、革命を通しやすい。`});
+      tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${fn}の4枚組で革命</strong>。2・JKRが無いこの手では革命が主戦略。4枚出すと強さが逆転する。場が流れなければ、相手が逆転後により強い4枚組を持っていると返される。`});
     } else {
-      tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${fn}の4枚組</strong>は革命に使えるが、そのまま出してもそこそこ強い。盤面の優劣を見て「革命か温存か」を選択する。`});
+      tips.push({b:`革命 ${fn}`,c:'y',t:`<strong>${fn}の4枚組を出すと必ず革命になる</strong>。盤面の優劣を見て「4枚まとめて出すか、温存するか」を選択する。`});
     }
-    if(fours.length>=2) tips.push({b:'革命返し可',c:'y',t:'4枚組複数あり。<strong>相手の革命に対してより弱い数字の4枚組で返せる</strong>。どちらを温存するか事前に決めておく。革命返しは最強の反撃手段。'});
+    if(fours.length>=2) tips.push({b:'革命返し候補',c:'y',t:'4枚組複数あり。<strong>場の4枚組より現在の強さ順で強い組があれば返せる</strong>。革命中は小さい数字の方が強く、4枚を出すたびに強さが再び逆転する。'});
   }
   // JKR補完革命（3枚組+JKRで革命）
   if(rRev&&joker>0&&!fours.length){
@@ -1592,9 +1594,9 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   if(joker===2){
     const triJkr=NUMS.filter(n=>n!==16&&(hand[n]||0)===3);
     if(rRev&&triJkr.length){
-      tips.push({b:'JKR×2 革命×2候補',c:'g',t:`JKR2枚保持かつ3枚組あり。<strong>2種の革命をJKR補完で狙える</strong>。また2枚をペア補完に分けて使うことも可能。局面に応じて「単体最強」「ペア補完」「革命」の3択を使い分ける。`});
+      tips.push({b:'JKR×2 革命補完候補',c:'g',t:`JKR2枚保持かつ3枚組あり。<strong>3枚組にJKRを1枚補完して革命を狙える</strong>。別々の3枚組が2種あれば、それぞれに1枚ずつ補完できる。また数字札があれば2枚をペア補完に分けて使うことも可能。局面に応じて「単体最強」「ペア補完」「革命」の3択を使い分ける。`});
     } else {
-      tips.push({b:'JKR×2',c:'g',t:'<strong>最強カードを2枚保持</strong>。スペード3返しなしのため終盤まで絶対的切り札。相手の2やペアを後出しで制圧できる。ペア補完に1枚使っても1枚温存できる余裕がある。'});
+      tips.push({b:'JKR×2',c:'g',t:'<strong>単体では最強のJKRを2枚保持</strong>。相手の単体の2には返せるが、同じJKRには返せない。JKR2枚だけのペアは出せず、ペアには数字札との補完が必要。補完した組はその数字の強さで判定する。'});
     }
   } else if(joker===1){
     // ペア補完できる数字があるか
@@ -1610,22 +1612,22 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   // 手札全体が弱い（1位率が平均を下回る）か：tooltipの煽り表現を文脈に合わせるフラグ
   const weakHand = p1 < T_mid;
 
-  // 2（最強通常カード）
+  // 2（通常時に最強の数字札。同じ強さへの返しは不可）
+  const twoRule = `2同士やJKRには返せない。${rRev?'革命中の2は最も弱い数字札になる。':''}`;
   if((hand[15]||0)>=2){
     if(weakHand)
-      tips.push({b:`2×${hand[15]}`,c:'',t:`<strong>最強通常カードを${hand[15]}枚保持</strong>。ただし手札全体は鈍重で、2は<strong>最下位回避の保険</strong>として効く一方、1位を取り切る力は限定的。序盤に温存しすぎると手札が捌けず終盤に詰まるため、中盤で流れを作る使い方も検討する。`});
+      tips.push({b:`2×${hand[15]}`,c:'',t:`<strong>通常時に最強の数字札を${hand[15]}枚保持</strong>。${twoRule}ただし手札全体は鈍重で、2は<strong>最下位回避の保険</strong>として効く一方、1位を取り切る力は限定的。序盤に温存しすぎると手札が捌けず終盤に詰まるため、中盤で流れを作る使い方も検討する。`});
     else
-      tips.push({b:`2×${hand[15]}`,c:'g',t:`<strong>最強通常カードを${hand[15]}枚保持</strong>。場の制圧力が高い。序盤は温存し、相手が2で上がりを狙うタイミングに合わせてカウンターを。`});
+      tips.push({b:`2×${hand[15]}`,c:'g',t:`<strong>通常時に最強の数字札を${hand[15]}枚保持</strong>。${twoRule}場に返すなら、同じ枚数で2より弱い組が出たときに使う。`});
   }
-  else if(has2&&!joker) tips.push({b:'2×1',c:'g',t:'2枚は最強の通常カード。<strong>終盤の確実な上がりの保険</strong>として温存が基本。ただし手数が多い場合は中盤で使って流れを作ることも選択肢。'});
+  else if(has2&&!joker) tips.push({b:'2×1',c:'g',t:`2は通常時に最強の数字札。${twoRule}<strong>終盤の上がり札候補</strong>として温存が基本。ただし手数が多い場合は中盤で使って流れを作ることも選択肢。`});
   
   // Aカード
-  if(hasA&&(hand[14]||0)>=2) tips.push({b:`A×${hand[14]}`,c:'',t:`Aが${hand[14]}枚。<strong>A複数枚は中終盤のペア・トリプル確保</strong>に強い。ペア縛りの場を作って一気に処理するとよい。`});
+  if(hasA&&(hand[14]||0)>=2) tips.push({b:`A×${hand[14]}`,c:'',t:`Aが${hand[14]}枚。<strong>同じ数字でまとめて出せる</strong>。ペアは2枚、トリプルは3枚必要（不足分はJKRで補完可能）。場に返す場合は、同じ枚数で現在の強さ順に勝つ必要がある。`});
   
   // 8切り
   if(has8){
-    if((hand[8]||0)>=2) tips.push({b:`8切り×${hand[8]}`,c:'',t:`8が${hand[8]}枚。<strong>8切りは7以下の場限定のリセット手</strong>。相手が低カードを出してきたタイミングにしか使えない。使える機会は限られるので温存しすぎず、手番を取り直したいときに積極的に切る。`});
-    else tips.push({b:'8切り',c:'',t:'<strong>7以下の場にしか出せない限定的なリセット手</strong>。使えるタイミングは少ないが、場を断ち切って手番を取り直せる。最後の1枚を8で出して上がることもできる。'});
+    tips.push({b:hand[8]>=2?`8切り×${hand[8]}`:'8切り',c:'',t:`<strong>場が空なら8を親出しできる</strong>。場に重ねるときは同じ枚数が必要で、通常時は3〜7${rRev?'、革命中は9・10・J・Q・K・A・2':''}の組に出せる。出すと場が流れ、<strong>手札が残っていれば自分の手番が続く</strong>。8で上がった場合は次の人の手番になる。`});
   }
   
   // テンポ（手番奪取）の弱点警告：2・JKRが無いのに見かけ上の強さがある手
@@ -1642,14 +1644,14 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   if(triples.length) {
     const tn=triples.map(n=>D[n]).join('・');
     if(weakHand)
-      tips.push({b:`3枚組 ${tn}`,c:'',t:`<strong>${tn}の3枚組</strong>は3枚縛りの場では強いが、<strong>自分でリードしないと出せず機会が限られる</strong>。手札全体が鈍重なため、温存より「自分から3枚縛りを仕掛けて一気に枚数を削る」消化手段として使う。`});
+      tips.push({b:`3枚組 ${tn}`,c:'',t:`<strong>${tn}の3枚組</strong>は親出しでき、<strong>場が3枚組なら現在の強さ順で勝てる場合にも返せる</strong>。手札全体が鈍重なため、温存より「自分から3枚縛りを仕掛けて一気に枚数を削る」消化手段として使う。`});
     else
-      tips.push({b:`3枚組 ${tn}`,c:'',t:`<strong>${tn}の3枚組</strong>は3枚出しの場で圧倒的に強い。相手に同じ手がなければほぼ通る。3枚縛りの場を自分で作ることも検討。`});
+      tips.push({b:`3枚組 ${tn}`,c:'',t:`<strong>${tn}の3枚組</strong>は親出しでき、場が3枚組なら現在の強さ順で勝てる場合にも返せる。同じ数字には返せず、場が残る場合は相手のより強い3枚組に返される。`});
   }
   
   // 低カードのみ
   if(lowOnly>=total*0.7&&total>=6){
-    tips.push({b:'低カード多め',c:'r',t:`手札の${Math.round(lowOnly/total*100)}%が3〜7。<strong>終盤の制圧力が低い</strong>ため、序盤から積極的に多枚数出しで枚数を削る。8切りや革命があれば積極活用。`});
+    tips.push({b:'低カード多め',c:'r',t:`手札の${Math.round(lowOnly/total*100)}%が3〜7。<strong>終盤の制圧力が低い</strong>ため、序盤から積極的に多枚数出しで枚数を削る。${has8?'8切りも活用。':''}${rRev?'革命ができれば活用。':''}`});
   }
   
   // 枚数が少ない
@@ -1662,6 +1664,7 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   if(!tips.length) tips.push({b:'バランス',c:'',t:'手札バランスが良い。<strong>状況に応じて強弱を使い分け</strong>ながら立ち回る。序盤はペア・多枚出しで枚数を削り、中盤以降は場の流れに合わせて強カードを投入する。'});
 
   let th=`<div class="atitle">手札別の戦術ポイント</div>`;
+  th+=`<div class="aitem">場に返すには<strong>同じ枚数で、現在の強さ順でより強い組</strong>が必要。同じ強さでは返せない。JKRを数字札に補完した組は、その数字の強さで判定する。</div>`;
   for(const t of tips) th+=`<div class="aitem"><span class="badge ${t.c}">${t.b}</span>${t.t}</div>`;
   const tb=document.createElement('div'); tb.className='abox'; tb.style.animationDelay='.07s';
   tb.innerHTML=th; adv.appendChild(tb);
@@ -1669,10 +1672,11 @@ function renderAdv(rates,np,hand,r8,rRev,evalResult,pos){
   // ── 確率の解釈ガイド ──
   const kb=document.createElement('div'); kb.className='abox'; kb.style.animationDelay='.14s';
   let kh=`<div class="atitle">確率の読み方</div>`;
-  if(p1>=T_vstrong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は非常に強い手札（上位1割クラス）。ただし大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
-  else if(p1>=T_strong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は上位圏の好手（平均30%前後を大きく上回る）。<strong>受け身にならず1位を取りにいける</strong>強さ。ただし毎回1位になれるわけではないので傾向の目安として。</div>`;
-  else if(p1>=T_lowmid) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は標準的な手札の強さ（平均は30%前後）。大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
-  else kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は苦しい手。最下位確率が<strong>${pLast}%</strong>あることも念頭に置く。リスクを取って攻めるか、確実に中位を守るかの判断が問われる局面。</div>`;
+  kh+=`<div class="aitem">${np}人戦で全員の1位率が同じなら<strong>${Number(base.toFixed(1))}%</strong>（100÷${np}人）。これは均等な比較基準で、実際の手札分布の平均や上位何割かを示すものではない。表示確率と強さ判定は<strong>選択したルール・配札仮定・AIによるモデル内の目安</strong>で、実戦の勝率を保証しない。</div>`;
+  if(p1>=T_vstrong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は比較基準を大きく上回る。ただし大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
+  else if(p1>=T_strong) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は比較基準を上回る。<strong>受け身にならず1位を取りにいく</strong>方針も考えられる。ただし毎回1位になれるわけではないので傾向の目安として。</div>`;
+  else if(p1>=T_lowmid) kh+=`<div class="aitem">1位確率<strong>${p1}%</strong>は比較基準をやや上回る。大富豪はランダム性が高く、<strong>強い手でも毎回1位になれるわけではない</strong>。確率はあくまで傾向の目安として活用する。</div>`;
+  else kh+=`<div class="aitem">1位確率は<strong>${p1}%</strong>。最下位確率が<strong>${pLast}%</strong>あることも念頭に置く。リスクを取って攻めるか、確実に中位を守るかの判断が問われる局面。</div>`;
   kb.innerHTML=kh; adv.appendChild(kb);
 }
 
@@ -1686,6 +1690,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
 
   // 手札情報を整理
   const joker   = hand[16] || 0;
+  const canEightCut = r8 && (hand[8] || 0) > 0;
   const has2    = (hand[15] || 0);
   const hasA    = (hand[14] || 0);
   const hasK    = (hand[13] || 0);
@@ -1712,9 +1717,11 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   if(joker) strongCards.push(`JKR×${joker}`);
 
   // 革命後に弱くなるカード（現在強い → 革命後弱い）
+  const revRanks = new Set([...revWith4, ...revWith3j]);
   const preRevDump = hasRevPlan
-    ? [has2 && '2', hasA && 'A', hasK && 'K'].filter(Boolean)
-    : [];
+    ? [[15,has2,'2'],[14,hasA,'A'],[13,hasK,'K']]
+        .filter(([rank,count])=>count>0&&!revRanks.has(rank)).map(([, ,label])=>label)
+    : []; // 革命候補そのものを先に崩すよう勧めない。
 
   // ── 戦略文生成（役職×手札強さのマトリクス） ──
   const p1     = rates[1];
@@ -1725,11 +1732,10 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   // 3人戦の従来値（50/55/40/35/30）を base=33.3 基準の倍率で表現し、
   // 4人・5人戦でも同じ相対感覚で判定できるようにする。
   const base = 100 / np;
-  // 実測分布での較正（3人戦）：1位率の中央値≈31%、上位25%≈47%、上位10%≈60%。
-  // = base*0.92 / base*1.41 / base*1.81。これに合わせて閾値を設定。
+  // 従来の表示・助言用閾値を維持する。手札分布の百分位を示すものではない。
   const TH = {
     vstrong: base * 1.65, // 3人→55
-    strong:  base * 1.38, // 3人→46（実測の上位25%ライン付近）
+    strong:  base * 1.38, // 3人→46
     good:    base * 1.20, // 3人→40
     lowmid:  base * 1.05, // 3人→35
     mid:     base * 0.90, // 3人→30
@@ -1739,14 +1745,14 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
     high: base * 1.05,    // 3人→35
     low:  base * 0.90,    // 3人→30
   };
-  // ── 手札の総合的な強さ判定（1位率を実測分布で較正してラベル化）──
+  // ── モデル内の1位率を均等な比較基準に対してラベル化 ──
   const verdict =
-    p1 >= base * 1.80 ? { t:'非常に強い手', c:'var(--green)', s:'上位1割クラス' } :
-    p1 >= base * 1.38 ? { t:'強い手',       c:'var(--green)', s:'上位2〜3割の好手' } :
-    p1 >= base * 1.12 ? { t:'やや強い手',   c:'var(--acc)',   s:'平均より上' } :
-    p1 >= base * 0.85 ? { t:'平均的な手',   c:'var(--acc)',   s:'平均並み' } :
-    p1 >= base * 0.55 ? { t:'やや弱い手',   c:'var(--red)',   s:'平均より下' } :
-                        { t:'弱い手',       c:'var(--red)',   s:'下位クラス' };
+    p1 >= base * 1.80 ? { t:'非常に強い手', c:'var(--green)', s:'比較基準を大きく上回る' } :
+    p1 >= base * 1.38 ? { t:'強い手',       c:'var(--green)', s:'比較基準を上回る' } :
+    p1 >= base * 1.12 ? { t:'やや強い手',   c:'var(--acc)',   s:'比較基準をやや上回る' } :
+    p1 >= base * 0.85 ? { t:'基準付近の手', c:'var(--acc)',   s:'比較基準に近い' } :
+    p1 >= base * 0.55 ? { t:'やや弱い手',   c:'var(--red)',   s:'比較基準を下回る' } :
+                        { t:'弱い手',       c:'var(--red)',   s:'比較基準を大きく下回る' };
   const defMode     = pLast2 >= PL.def;
   const weakSingles = singles.filter(n => n < 11).length;
   const allSingles  = singles.length;
@@ -1765,7 +1771,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   // ── 段落1：立場と基本スタンス ──
   if(isFugo && p1 <= TH.mid && hasRevPlan){
     // 富豪ピンチ×革命候補あり：革命前に上位カードを消化する戦略
-    paras.push(`都落ちリスクが高い（${doraku.toFixed(0)}%）が、革命候補がある。${dumpDesc ? dumpDesc+'などの上位カードを先に消化しながら' : '上位カードを先に整理しながら'}頃合いを見て革命を決めると、残り手が一気に強くなる。革命後は枚数が少なくそのまま押し切れる展開が狙える。`);
+    paras.push(`都落ちリスクが高い（${doraku.toFixed(0)}%）が、革命候補がある。${dumpDesc ? dumpDesc+'などの上位カードを先に消化しながら' : ''}頃合いを見て革命を決めると、残り手が一気に強くなる。革命後は枚数が少なくそのまま押し切れる展開が狙える。`);
   } else if(isFugo && p1 <= TH.mid){
     // 富豪ピンチ：正解がない難局、選択肢を提示
     paras.push(`都落ちリスクが高い（${doraku.toFixed(0)}%）。難しい局面で正解はないが、選択肢は2つある。①弱いカードから先出しして場を取り、相手に強カードを使わせるブラフ戦略。②ペアを温存して終盤に一気に枚数を削る逆転狙い。相手の手の強さを見ながら判断する。`);
@@ -1773,7 +1779,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
     paras.push(`富豪キープの可能性が高い（1位率${p1}%）。現状維持が基本方針。強カードを序盤に消耗せず、中盤以降に相手が消耗したタイミングで制圧する。`);
   } else if(isFugo && hasRevPlan){
     // 富豪やや弱×革命候補あり
-    paras.push(`富豪だが手札は弱い（1位率${p1}%）。革命候補があるので${dumpDesc ? dumpDesc+'を先に消化しながら' : '上位カードを整理しながら'}革命のタイミングを狙う戦略が取れる。革命後の残り手が強くなるほど有効。都落ちリスク${doraku.toFixed(0)}%は意識しつつ、革命で局面を変えることも視野に入れる。`);
+    paras.push(`富豪だが手札は弱い（1位率${p1}%）。革命候補があるので${dumpDesc ? dumpDesc+'を先に消化しながら' : ''}革命のタイミングを狙う戦略が取れる。革命後の残り手が強くなるほど有効。都落ちリスク${doraku.toFixed(0)}%は意識しつつ、革命で局面を変えることも視野に入れる。`);
   } else if(isFugo){
     paras.push(`富豪だが手札は弱い（1位率${p1}%、都落ちリスク${doraku.toFixed(0)}%）。難しい局面で正解はないが、選択肢は2つある。①弱いカードから先出しして場を取り、相手に強カードを使わせるブラフ戦略。②ペアを温存して終盤に一気に枚数を削る逆転狙い。`);
   } else if(isHinmin && p1 >= TH.good){
@@ -1794,7 +1800,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
     paras.push(`中程度の手札（1位率${p1}%）。現状維持が基本。無理に富豪を狙わず、${triDesc ? triDesc+'のトリプルや' : ''}ペアを活かして手番を確保しながら枚数を削る。強カードは切り返し用に残す。`);
   } else {
     // 平民・弱手
-    paras.push(`苦しい手札（1位率${p1}%）。現状維持を目標に手番確保を優先する。${r8 && (hand[8]||0)>0 ? '相手が7以下を出したタイミングに8切りで手番を取り直しながら、' : ''}着実に枚数を削ることに集中する。`);
+    paras.push(`苦しい手札（1位率${p1}%）。現状維持を目標に手番確保を優先する。${canEightCut ? '親出しや同じ枚数で返せる場で8切りを使いながら、' : ''}着実に枚数を削ることに集中する。`);
   }
 
   // ── 段落2：手札固有の戦術ポイント ──
@@ -1805,12 +1811,9 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
     tactics.push(`${triDesc}のトリプルはリードより消化優先。3枚まとめて出して手数を一気に減らす。`);
   }
   if(revDesc){
-    // 革命後に主役となる低い数字（3〜5の複数枚）を持っているか
-    const lowAfterRev = [3,4,5].filter(n => (hand[n]||0) >= 2);
-    const lowDesc = lowAfterRev.map(n=>D[n]).join('・');
     if(!hasStrong){
       // 2・JKRが無い＝テンポ札に乏しい → 革命がこの手の主戦略
-      tactics.push(`${revDesc}で革命が狙える。2やJKRのような切り返し札に乏しいので、<strong>この手は革命を主軸に組み立てる</strong>。${dumpDesc ? dumpDesc+'を先に処理し、' : ''}革命後は低い数字（${lowDesc || '3・4'}）が最強格になり、${lowDesc ? `その${lowDesc}が手番を握る主役になる` : '一気に押し切れる'}。`);
+      tactics.push(`${revDesc}で革命が狙える。2やJKRのような切り返し札に乏しいので、<strong>この手は革命を主軸に組み立てる</strong>。${dumpDesc ? dumpDesc+'を先に処理し、' : ''}革命に出したカードは手札に残らない。革命後は、残った手札のうち小さい数字ほど強くなる（JKRは最強のまま）。`);
     } else if(p1 >= TH.good){
       tactics.push(`${revDesc}で革命も狙えるが、2・JKRなど強カードがあるので必須ではない。盤面が優勢なら温存でよい。`);
     } else {
@@ -1818,12 +1821,13 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
     }
   }
   if(has2 >= 2 && !defMode){
-    tactics.push(`2×${has2}は場をリードして主導権を握れる主力札。相手の上がり狙いへのカウンターにも、自分の上がり札にも使える。`);
+    tactics.push(`2×${has2}は通常時に強い札。相手の上がり狙いへのカウンターにも、自分の上がり札にも使える。`);
   } else if(has2 === 1 && !defMode){
-    tactics.push(`2は強力なリード/上がり札。序盤の浪費は避けつつ、相手の上がり狙いへのカウンターや自分の上がりに活かす。`);
+    tactics.push(`2は通常時に強いリード/上がり札。序盤の浪費は避けつつ、相手の上がり狙いへのカウンターや自分の上がりに活かす。`);
   } else if(has2 >= 1 && defMode){
-    tactics.push(`2は出し惜しみせず、残り手が少なくなったら確実に上がるために使う。`);
+    tactics.push(`2は通常時に強い札。出し惜しみせず、残り手が少なくなったら上がりを狙うために使う。`);
   }
+  if(has2) tactics.push(`2を場に返すには同じ枚数が必要で、2同士やJKRには返せない。${rRev?'革命中の2は最も弱い数字札になる。':''}`);
   if(joker >= 1 && !defMode){
     tactics.push(`JKR${joker>=2?'×'+joker:''}は最強札。基本は中終盤まで温存しつつ、上がりやリードのチャンスでは惜しまず使う。${revWith3j.length>0&&p1<TH.good?'革命補完にも使える。':''}`);
   } else if(joker >= 1 && defMode){
@@ -1833,13 +1837,13 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
 
   // ── 段落3：手番が取れない場合の対処 ──
   if(defMode || (!hasStrong && weakSingles >= 3)){
-    paras.push(`手番が回ってこない展開になりやすい。相手の場が切れたタイミング・8切り後・パスが続いた後を逃さず、弱いカードから積極的に出して枚数を減らす。`);
+    paras.push(`手番が回ってこない展開になりやすい。場が流れて自分が親になった機会を逃さず、弱いカードから積極的に出して枚数を減らす。`);
   }
 
   // ── 最優先事項 ──
   let priority = '';
   if(isFugo && p1 <= TH.mid && hasRevPlan){
-    priority = `都落ちリスク高（${doraku.toFixed(0)}%）。<strong>${dumpDesc ? dumpDesc+'を先に消化しながら革命のタイミングを狙う' : '上位カードを整理しながら革命で局面を変える'}</strong>。`;
+    priority = `都落ちリスク高（${doraku.toFixed(0)}%）。<strong>${dumpDesc ? dumpDesc+'を先に消化しながら革命のタイミングを狙う' : '革命で局面を変える'}</strong>。`;
   } else if(isFugo && p1 <= TH.mid){
     priority = `都落ちリスク高（${doraku.toFixed(0)}%）。革命・ギャンブル手は封印し、<strong>確実に1位を取ることだけ</strong>を考える。`;
   } else if(isFugo && p1 <= TH.strong){
@@ -1847,7 +1851,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   } else if(pLast2 >= PL.def){
     priority = `最下位転落リスクが高い（${pLast2}%）。1位より<strong>確実に手札を処理して上がりきること</strong>を優先する。`;
   } else if(pLast2 >= PL.high && p1 < TH.mid){
-    priority = `苦しい手。<strong>最下位回避を優先</strong>（最下位${pLast2}%）。相手が低カードを出した隙に8切りで手番を取り直しながら守る。`;
+    priority = `苦しい手。<strong>最下位回避を優先</strong>（最下位${pLast2}%）。${canEightCut?'親出しや同じ枚数で返せる場で8切りを使い、':''}手番を確保しながら守る。`;
   } else if(hasRevPlan && !hasStrong){
     // 2・JKRが無く革命候補がある＝テンポ札に乏しい革命依存型の手。
     // p1が高めでもそれは革命前提の数字なので、革命を主軸に据える。
@@ -1860,7 +1864,7 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   } else if(p1 >= TH.vstrong){
     priority = `手札は強い。強カードを温存しつつ中位手から丁寧に処理し、制圧する。`;
   } else if(p1 >= TH.strong){
-    priority = `<strong>上位圏の好手</strong>。受け身にならず<strong>自分から場をリードして1位を取りにいく</strong>。8切りやトリプル・ペアで主導権を握る。`;
+    priority = `<strong>上位圏の好手</strong>。受け身にならず<strong>自分から場をリードして1位を取りにいく</strong>。${canEightCut?'8切りや':''}トリプル・ペアで主導権を握る。`;
   } else if(p1 >= TH.lowmid){
     priority = `中程度の手。場の主導権を取れるタイミングを見極め、無駄な強カード消費を避ける。`;
   } else if(pairs.length >= 4 && weakSingles <= 2 && pLast2 < PL.low){
@@ -1868,14 +1872,14 @@ function renderGamePlan(rates, np, hand, r8, rRev, pos) {
   } else if(triples.length > 0 && pLast2 < PL.low){
     priority = `トリプルを軸に3枚縛りを仕掛ける。相手が対応できなければそのまま押し切る。`;
   } else {
-    priority = `難しい手。相手が7以下を出した隙に8切りでリセットし、手番を確保しながら着実に枚数を削る。`;
+    priority = `難しい手。${canEightCut?'親出しや同じ枚数で返せる場で8切りを使い、':''}手番を確保しながら着実に枚数を削る。`;
   }
 
   // ── 描画 ──
   const sumBox = document.createElement('div');
   sumBox.className = 'abox';
   sumBox.style.cssText = 'margin-bottom:10px;border-left:3px solid var(--acc);padding-left:14px';
-  sumBox.innerHTML = `<div class="atitle">手札の強さ判定</div>
+  sumBox.innerHTML = `<div class="atitle">手札の強さ判定（モデル内の目安）</div>
     <div style="font-size:1.05rem;font-weight:700;color:${verdict.c};margin-bottom:2px">${verdict.t}<span style="font-size:0.78rem;font-weight:400;color:var(--txt3)">　${verdict.s}・1位率${p1}% / 最下位${pLast2}%</span></div>
     <div class="atitle" style="margin-top:10px">この手札の最優先事項</div>
     <div style="font-size:0.93rem;color:var(--txt);line-height:1.8">${priority}</div>`;
